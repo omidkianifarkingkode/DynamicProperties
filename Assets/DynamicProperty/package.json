@@ -1,0 +1,28 @@
+{
+  "name": "com.kingkode.dynamic-property",
+  "version": "1.0.0",
+  "displayName": "Dynamic Property",
+  "description": "A flexible metadata-driven property system for Unity. Supports 32/64-bit dynamic data fields, enums, and rich editor integration for creating game data assets.",
+  "unity": "2022.1",
+  "unityRelease": "0f1",
+  "documentationUrl": "https://github.com/omidkianifarkingkode/dynamic-property",
+  "changelogUrl": "https://github.com/omidkianifarkingkode/dynamic-property/releases",
+  "license": "MIT",
+  "author": {
+    "name": "Omid Kianifar",
+    "email": "omid.kianifar.kingkode@email.com",
+    "url": "https://github.com/omidkianifarkingkode"
+  },
+  "dependencies": {
+  },
+  "keywords": [
+    "dynamic",
+    "property",
+    "metadata",
+    "data",
+    "game",
+    "editor",
+    "scriptableobject",
+    "unity"
+  ]
+}

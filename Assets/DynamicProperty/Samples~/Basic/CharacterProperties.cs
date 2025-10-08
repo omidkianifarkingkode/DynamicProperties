@@ -1,6 +1,6 @@
 ﻿using DynamicProperty;
 
-public enum PropertyId
+public enum CharacterProperties
 {
     None = 0,
 

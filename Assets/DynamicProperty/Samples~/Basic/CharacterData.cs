@@ -2,7 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Character : MonoBehaviour
+[CreateAssetMenu(fileName = "Character Data", menuName = "DynamicProperty/Create Sample Character Data")]
+public class CharacterData : ScriptableObject
 {
     public List<DynamicProperty32> Properties1;
     public List<DynamicProperty64> Properties2;

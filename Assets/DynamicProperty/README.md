@@ -12,6 +12,7 @@ Supports **32-bit and 64-bit storage**, custom attributes for type/range/step, a
 
 ```json
 "com.yourname.dynamic-properties": "https://github.com/yourname/dynamic-properties.git"
+```
 
 3. Unity will fetch the package automatically.
 

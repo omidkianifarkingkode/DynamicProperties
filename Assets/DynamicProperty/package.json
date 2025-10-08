@@ -15,6 +15,13 @@
   },
   "dependencies": {
   },
+  "samples": [
+    {
+      "displayName": "Basic Example",
+      "description": "A simple example showing how to define a PropertyId enum and use DynamicProperty32/64 in a Monobehaviour or ScriptableObject.",
+      "path": "Samples~/Basic"
+    }
+  ],
   "keywords": [
     "dynamic",
     "property",

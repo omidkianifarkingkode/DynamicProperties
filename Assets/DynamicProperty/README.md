@@ -12,6 +12,7 @@ Supports **32-bit and 64-bit storage**, custom attributes for type/range/step, a
 
 ```json
 "com.yourname.dynamic-properties": "https://github.com/yourname/dynamic-properties.git"
+```
 
 3. Unity will fetch the package automatically.
 
@@ -19,6 +20,7 @@ Supports **32-bit and 64-bit storage**, custom attributes for type/range/step, a
 
 1. Define your enum for property IDs in your game assembly:
 
+```csharp
 public enum PropertyId
 {
     [PropertyType(PropertyValueType.Int), DisplayName("Health"), MinMax(0, 9999)]
@@ -30,6 +32,7 @@ public enum PropertyId
     [PropertyType(PropertyValueType.Enum), PropertyEnum(typeof(WeaponType))]
     WeaponType,
 }
+```
 
 2. Bind your enum in Editor
 
@@ -42,12 +45,14 @@ The system now reflects your metadata everywhere.
 3. Use in ScriptableObjects
 Add fields with DynamicProperty32 or DynamicProperty64:
 
+```csharp
 [CreateAssetMenu(menuName = "Data/Character")]
 public class CharacterData : ScriptableObject
 {
     public List<DynamicProperty32> stats32;
     public List<DynamicProperty64> stats64;
 }
+```
 
 In the Inspector you’ll see dropdowns for keys and value fields adapting automatically.
 
@@ -55,7 +60,7 @@ In the Inspector you’ll see dropdowns for keys and value fields adapting autom
 
 Storage
 
-DynamicProperty32 = int-backed (ints, floats, bools, short enums, short DateTimes/TimeSpans).
+DynamicProperty32 = int-backed (ints, floats, bools, short enums).
 
 DynamicProperty64 = long-backed (longs, doubles, 64-bit enums, ticks-based DateTimes/TimeSpans).
 
@@ -79,11 +84,6 @@ Speed shows as a float field with step 0.1.
 
 WeaponType shows as a dropdown of enum values.
 
-📄 License
-
-MIT
-
+License
 ---
-
-Do you want me to also draft a **section with screenshots** placeholders (like “![Editor Example](docs/editor-example.png)”) so it’s easier for users to visualize setup?
-
+This library is under the MIT License.

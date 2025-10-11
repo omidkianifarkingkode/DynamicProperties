@@ -21,20 +21,41 @@ namespace DynamicProperty.Editor
             if (name == null) return null;
 
             var field = _enumType.GetField(name);
-            var meta = new PropertyMetadata
+            var meta = new PropertyMetadata();
+
+            if (field.GetCustomAttribute(typeof(PropertyTypeAttribute)) is PropertyTypeAttribute t)
             {
-                Type = field.GetCustomAttribute(typeof(PropertyTypeAttribute)) is PropertyTypeAttribute t ? t.Type : PropertyValueType.Int,
-                DisplayName = field.GetCustomAttribute(typeof(DisplayNameAttribute)) is DisplayNameAttribute dn ? dn.DisplayName : name,
-                EnumType = field.GetCustomAttribute(typeof(PropertyEnumAttribute)) is PropertyEnumAttribute pe ? pe.EnumType : null
-            };
-            if (field.GetCustomAttribute(typeof(MinMaxAttribute)) is MinMaxAttribute mm) { meta.Min = mm.Min; meta.Max = mm.Max; }
-            if (field.GetCustomAttribute(typeof(StepAttribute)) is StepAttribute st) { meta.Step = st.Step; }
+                meta.Type = t.Type;
+                meta.Bitness = t.Storage;
+            }
+            else
+            {
+                // default fallback (kept for safety)
+                meta.Type = PropertyValueType.Int;
+                meta.Bitness = PropertyBitness.Bit32;
+            }
+
+            if (field.GetCustomAttribute(typeof(DisplayNameAttribute)) is DisplayNameAttribute dn)
+                meta.DisplayName = dn.DisplayName;
+
+            if (field.GetCustomAttribute(typeof(MinMaxAttribute)) is MinMaxAttribute mm)
+            { meta.Min = mm.Min; meta.Max = mm.Max; }
+
+            if (field.GetCustomAttribute(typeof(StepAttribute)) is StepAttribute st)
+                meta.Step = st.Step;
+
+            if (field.GetCustomAttribute(typeof(PropertyEnumAttribute)) is PropertyEnumAttribute pe)
+                meta.EnumType = pe.EnumType;
+
+            if (field.GetCustomAttribute(typeof(GroupAttribute)) is GroupAttribute grp)
+                meta.GroupName = grp.Name;
 
             _cache[id] = meta;
             return meta;
         }
 
         public string[] GetAllNames() => _enumType == null ? Array.Empty<string>() : Enum.GetNames(_enumType);
+
         public int[] GetAllValues()
         {
             if (_enumType == null) return Array.Empty<int>();
@@ -44,4 +65,5 @@ namespace DynamicProperty.Editor
             return res;
         }
     }
+
 }

@@ -5,6 +5,13 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "Character Data", menuName = "DynamicProperty/Create Sample Character Data")]
 public class CharacterData : ScriptableObject
 {
-    public List<DynamicProperty32> Properties1;
-    public List<DynamicProperty64> Properties2;
+
+    public PropertySet Properties;
+
+    [ContextMenu("DynamicProperty/Print Properties")]
+    private void PrintProperties()
+    {
+        Debug.Log(PropertySetPrinter.Format(Properties, this), this);
+    }
 }
+

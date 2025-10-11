@@ -16,12 +16,45 @@ Supports **32-bit and 64-bit storage**, custom attributes for type/range/step, a
 
 3. Unity will fetch the package automatically.
 
-🚀 Usage & Setup
+## 🧩 Importing the Example
+
+You can explore the Basic Sample provided with the package:
+
+1. Open Window → Package Manager.
+
+2. Select Dynamic Property from the list.
+
+3. Expand the Samples section.
+
+4. Click Import next to Basic Example.
+
+This will import the example folder from:
+
+Packages/com.kingkode.dynamic-property/Samples~/Basic
+
+into:
+```
+Assets/Samples/Dynamic Property/1.0.0/Basic
+```
+The sample includes:
+
+* A CharacterProperties enum with metadata attributes
+
+* A CharacterData ScriptableObject using DynamicProperty32 and DynamicProperty64
+
+After importing, you must create the ScriptableObject manually using Unity’s menu:
+```
+➡️ Assets → Create → DynamicProperty → Create Sample Character Data
+```
+
+Then, select the created asset to see how dynamic properties appear and behave in the Inspector.
+
+## 🚀 Usage & Setup
 
 1. Define your enum for property IDs in your game assembly:
 
 ```csharp
-public enum PropertyId
+public enum CharacterProperties
 {
     [PropertyType(PropertyValueType.Int), DisplayName("Health"), MinMax(0, 9999)]
     Health,
@@ -35,10 +68,10 @@ public enum PropertyId
 ```
 
 2. Bind your enum in Editor
-
+```
 Go to Edit → Project Settings → Dynamic Properties.
-
-Select your PropertyId enum in the dropdown.
+```
+Select your CharacterProperties enum in the dropdown.
 
 The system now reflects your metadata everywhere.
 
@@ -56,7 +89,7 @@ public class CharacterData : ScriptableObject
 
 In the Inspector you’ll see dropdowns for keys and value fields adapting automatically.
 
-📝 Core Notes
+## 📝 Core Notes
 
 Storage
 
@@ -74,16 +107,16 @@ Binding survives domain reloads & recompiles automatically.
 Extensible
 You can add new property value types and drawers with minimal boilerplate.
 
-✅ Example
+## ✅ Example
 
 In the Inspector, with the example PropertyId above:
-
+```
 Health shows as an int slider (0–9999).
 
 Speed shows as a float field with step 0.1.
 
 WeaponType shows as a dropdown of enum values.
-
-License
+```
+## License
 ---
 This library is under the MIT License.

@@ -23,10 +23,10 @@ namespace DynamicProperty
         public static void SetLong(this ref DynamicProperty64 p, long v) => SetRaw(ref p, new ValueUnion64 { asLong = v }.raw);
 
         // DateTime/TimeSpan as ticks if you want:
-        public static DateTime GetDateTimeTicks(this in DynamicProperty64 p) => new DateTime(p.RawValue, DateTimeKind.Utc);
+        public static DateTime GetDateTimeTicks(this in DynamicProperty64 p) => new(p.RawValue, DateTimeKind.Utc);
         public static void SetDateTimeTicks(this ref DynamicProperty64 p, DateTime value) => SetRaw(ref p, value.Ticks);
 
-        public static TimeSpan GetTimeSpanTicks(this in DynamicProperty64 p) => new TimeSpan(p.RawValue);
+        public static TimeSpan GetTimeSpanTicks(this in DynamicProperty64 p) => new(p.RawValue);
         public static void SetTimeSpanTicks(this ref DynamicProperty64 p, TimeSpan value) => SetRaw(ref p, value.Ticks);
 
         // Enums (32-bit mask by default)

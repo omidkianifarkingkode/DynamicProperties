@@ -10,7 +10,5 @@ namespace DynamicProperty
         DateTime,
         TimeSpan,
         Enum,
-        DateTimeShort,
-        TimeSpanShort
     }
 }

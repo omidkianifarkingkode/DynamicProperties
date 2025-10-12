@@ -1,6 +1,7 @@
 ﻿using DynamicProperty;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -148,7 +149,7 @@ namespace DynamicProperty
             }
             else
             {
-                var p = new DynamicProperty32 { id = id };
+                var p = new DynamicProperty32(id);
                 setter(p);
                 _items32.Add(p);
                 _index32[id] = _items32.Count - 1;
@@ -163,11 +164,35 @@ namespace DynamicProperty
             }
             else
             {
-                var p = new DynamicProperty64 { id = id };
+                var p = new DynamicProperty64(id);
                 setter(p);
                 _items64.Add(p);
                 _index64[id] = _items64.Count - 1;
             }
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("PropertySet:");
+
+            if (_items32 == null || _items32.Count == 0) sb.AppendLine("  [32] (none)");
+            else
+            {
+                sb.AppendLine("  [32]");
+                foreach (var p in _items32)
+                    sb.AppendLine($"    - id {p.Id}: raw {p.RawValue}");
+            }
+
+            if (_items64 == null || _items64.Count == 0) sb.AppendLine("  [64] (none)");
+            else
+            {
+                sb.AppendLine("  [64]");
+                foreach (var p in _items64)
+                    sb.AppendLine($"    - id {p.Id}: raw {p.RawValue}");
+            }
+
+            return sb.ToString();
         }
     }
 }

@@ -4,8 +4,8 @@ namespace DynamicProperty
 {
     public static class DynamicProperty32Extensions
     {
-        private static ValueUnion32 U(this in DynamicProperty32 p) => new ValueUnion32 { raw = p.rawValue };
-        private static void SetRaw(ref DynamicProperty32 p, int raw) => p.rawValue = raw;
+        private static ValueUnion32 U(this in DynamicProperty32 p) => new ValueUnion32 { raw = p.RawValue };
+        private static void SetRaw(ref DynamicProperty32 p, int raw) => p.RawValue = raw;
 
 
         public static int GetInt(this in DynamicProperty32 p) => p.U().asInt;

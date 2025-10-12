@@ -1,6 +1,8 @@
-﻿using System;
+﻿using DynamicProperty.DataAnnotations;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
 
 namespace DynamicProperty.Editor
 {
@@ -9,7 +11,11 @@ namespace DynamicProperty.Editor
         readonly Type _enumType;
         readonly Dictionary<int, PropertyMetadata> _cache = new();
 
-        public ReflectionMetadataResolver(Type enumType) { _enumType = enumType; }
+        public ReflectionMetadataResolver(Type enumType)
+        {
+            _enumType = enumType;
+        }
+
         public Type BoundEnumType => _enumType;
 
         public PropertyMetadata Get(int id)
@@ -23,29 +29,89 @@ namespace DynamicProperty.Editor
             var field = _enumType.GetField(name);
             var meta = new PropertyMetadata();
 
-            if (field.GetCustomAttribute(typeof(PropertyTypeAttribute)) is PropertyTypeAttribute t)
+            // Get PropertyType attribute applied to the enum value
+            var propertyTypeAttr = field.GetCustomAttribute<PropertyTypeAttribute>();
+            if (propertyTypeAttr != null)
             {
-                meta.Type = t.Type;
-                meta.Bitness = t.Storage;
-            }
-            else
-            {
-                // default fallback (kept for safety)
-                meta.Type = PropertyValueType.Int;
-                meta.Bitness = PropertyBitness.Bit32;
+                var propertyType = propertyTypeAttr.Type;
+
+                // Handle basic types and enums
+                if (propertyType == typeof(float))
+                {
+                    meta.Type = PropertyValueType.Float;
+                }
+                else if (propertyType == typeof(int))
+                {
+                    meta.Type = PropertyValueType.Int;
+                }
+                else if (propertyType == typeof(bool))
+                {
+                    meta.Type = PropertyValueType.Bool;
+                }
+                else if (propertyType == typeof(long))
+                {
+                    meta.Type = PropertyValueType.Long;
+                }
+                else if (propertyType == typeof(double))
+                {
+                    meta.Type = PropertyValueType.Double;
+                }
+                else if (propertyType == typeof(DateTime))
+                {
+                    meta.Type = PropertyValueType.DateTime;
+                }
+                else if (propertyType == typeof(TimeSpan))
+                {
+                    meta.Type = PropertyValueType.TimeSpan;
+                }
+                else if (propertyType.IsEnum) // Detect if it's an Enum
+                {
+                    meta.Type = PropertyValueType.Enum;
+                    meta.EnumType = propertyType;
+                }
+                else if (propertyType == typeof(Vector4)) // Special case for Vector3 grouping
+                {
+                    meta.Type = PropertyValueType.Float;
+                    meta.GroupKind = PropertyGroupKind.Vector4;
+                    meta.GroupName = propertyTypeAttr.GroupName ?? "Vector4 Group";
+                }
+                else if (propertyType == typeof(Vector3)) // Special case for Vector3 grouping
+                {
+                    meta.Type = PropertyValueType.Float;
+                    meta.GroupKind = PropertyGroupKind.Vector3;
+                    meta.GroupName = propertyTypeAttr.GroupName ?? "Vector3 Group";
+                }
+                else if (propertyType == typeof(Vector2)) // Special case for Vector3 grouping
+                {
+                    meta.Type = PropertyValueType.Float;
+                    meta.GroupKind = PropertyGroupKind.Vector2;
+                    meta.GroupName = propertyTypeAttr.GroupName ?? "Vector2 Group";
+                }
+                else if (propertyType == typeof(Color)) // Special case for Color grouping
+                {
+                    meta.Type = PropertyValueType.Float;
+                    meta.GroupKind = PropertyGroupKind.Color;
+                    meta.GroupName = propertyTypeAttr.GroupName ?? "Color Group";
+                }
+
+                if (propertyTypeAttr.DefaultValue != null)
+                {
+                    meta.DefaultValue = propertyTypeAttr.DefaultValue;
+                }
             }
 
+            // Detect other attributes like DisplayName, MinMax, etc.
             if (field.GetCustomAttribute(typeof(DisplayNameAttribute)) is DisplayNameAttribute dn)
                 meta.DisplayName = dn.DisplayName;
 
             if (field.GetCustomAttribute(typeof(MinMaxAttribute)) is MinMaxAttribute mm)
-            { meta.Min = mm.Min; meta.Max = mm.Max; }
+            {
+                meta.Min = mm.Min;
+                meta.Max = mm.Max;
+            }
 
             if (field.GetCustomAttribute(typeof(StepAttribute)) is StepAttribute st)
                 meta.Step = st.Step;
-
-            if (field.GetCustomAttribute(typeof(PropertyEnumAttribute)) is PropertyEnumAttribute pe)
-                meta.EnumType = pe.EnumType;
 
             if (field.GetCustomAttribute(typeof(GroupAttribute)) is GroupAttribute grp)
                 meta.GroupName = grp.Name;
@@ -65,5 +131,4 @@ namespace DynamicProperty.Editor
             return res;
         }
     }
-
 }

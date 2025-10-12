@@ -1,17 +1,23 @@
 ﻿using DynamicProperty;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
+using DynamicProperty.Editor.Extensions;
+#endif
 
 [CreateAssetMenu(fileName = "Character Data", menuName = "DynamicProperty/Create Sample Character Data")]
 public class CharacterData : ScriptableObject
 {
-
-    public PropertySet Properties;
+    [SerializeField] protected PropertySet Properties;
 
     [ContextMenu("DynamicProperty/Print Properties")]
     private void PrintProperties()
     {
-        Debug.Log(PropertySetPrinter.Format(Properties, this), this);
+#if UNITY_EDITOR
+        Debug.Log(Properties != null ? Properties.ToPrettyString(this) : "<null>", this);
+#else
+        Debug.Log(Properties != null ? Properties.ToString() : "<null>", this);
+#endif
     }
 }
 

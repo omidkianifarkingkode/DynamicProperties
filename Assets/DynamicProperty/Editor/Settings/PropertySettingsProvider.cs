@@ -18,7 +18,7 @@ namespace DynamicProperty.Editor
             var settings = DynamicPropertiesSettings.instance;
 
             Type current = settings.EnumType;
-            Type newType = EnumTypePicker.Popup("PropertyId Enum", current); // your picker
+            Type newType = EnumTypePicker.Popup("PropertyId Enum", current);
 
             if (newType != current)
             {

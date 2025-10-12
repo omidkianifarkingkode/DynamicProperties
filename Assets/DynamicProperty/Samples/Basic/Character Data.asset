@@ -14,30 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Properties:
     _items32:
-    - id: 9
-      rawValue: 1065353216
-    - id: 10
-      rawValue: 0
-    - id: 11
-      rawValue: 0
-    - id: 12
-      rawValue: 1062984668
-    - id: 6
-      rawValue: 1092616192
-    - id: 7
-      rawValue: 1092616192
-    - id: 8
-      rawValue: 1106247680
+    - id: 1
+      rawValue: 100
     - id: 2
       rawValue: 1
-    - id: 1
-      rawValue: 1110179840
+    - id: 14
+      rawValue: 0
     - id: 3
-      rawValue: 3
-    - id: 13
-      rawValue: 3
+      rawValue: 0
     _items64:
     - id: 4
-      rawValue: 2839968100000000
-    - id: 5
-      rawValue: 100000000
+      rawValue: 6000000000

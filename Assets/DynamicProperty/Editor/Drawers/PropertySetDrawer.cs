@@ -1,67 +1,61 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace DynamicProperty.Editor {
-    //[CustomPropertyDrawer(typeof(PropertySet))]
+namespace DynamicProperty.Editor
+{
+    [CustomPropertyDrawer(typeof(PropertySet))]
     public class PropertySetDrawer : PropertyDrawer
     {
-        // Visual row model for 32-bit section
-        private struct Row32
+        private enum Backing { Bit32, Bit64 }
+
+        private struct Row
         {
-            public string Label;           // group name or single label
-            public string GroupKey;        // null for singles
-            public List<int> Indices;      // indices into _items32
-            public PropertyGroupKind Kind; // Color/Vector2/Vector3/None
-            public bool IsGroup;
-            public bool IsDuplicate;
+            public Backing Bin;            // which internal list this row belongs to
+            public bool IsGroup;           // grouped 32-bit float row (Vector/Color)
+            public PropertyGroupKind Kind; // None / Vector2 / Vector3 / Color
+            public string Label;           // group label or single display name
+            public string GroupKey;        // non-null for groups
+            public List<int> Indices;      // indices into the corresponding list (_items32/_items64)
+            public bool IsDuplicate;       // highlight duplicate
             public float Height;
         }
 
-        // -------------------- Sizing --------------------
+        // ---------- Routing by type (no bitness) ----------
+        private static bool Is32Type(PropertyValueType t) =>
+            t == PropertyValueType.Int
+         || t == PropertyValueType.Float
+         || t == PropertyValueType.Bool
+         || t == PropertyValueType.Enum;
+
+        private static bool Is64Type(PropertyValueType t) =>
+            t == PropertyValueType.Long
+         || t == PropertyValueType.Double
+         || t == PropertyValueType.DateTime
+         || t == PropertyValueType.TimeSpan;
+
+        // ---------- Height ----------
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
             PropertyMetadataRegistry.EnsureBound();
             var resolver = PropertyMetadataRegistry.Resolver;
             if (resolver == null) return EditorGUIUtility.singleLineHeight * 2f;
 
-            var items32 = property.FindPropertyRelative("_items32");
-            var items64 = property.FindPropertyRelative("_items64");
+            var (items32, items64) = GetLists(property);
             if (items32 == null || items64 == null) return EditorGUIUtility.singleLineHeight * 2f;
 
-            BuildRows32(property, resolver, out var rows32, out var dup32, out var crossDup);
-            var dup64 = HasDuplicates(items64, out _);
+            BuildRowsUnified(property, resolver, out var rows, out bool hasAnyDup);
 
-            float h = 0f;
-            // Title
-            h += EditorGUIUtility.singleLineHeight + 4f;
-
-            // Warnings
-            if (dup32 || dup64 || crossDup)
-            {
-                // up to two lines of help boxes
-                if (dup32) h += EditorGUIUtility.singleLineHeight * 1.5f + 4f;
-                if (dup64) h += EditorGUIUtility.singleLineHeight * 1.5f + 4f;
-                if (crossDup) h += EditorGUIUtility.singleLineHeight * 1.5f + 4f;
-            }
-
-            // 32-bit header
-            h += EditorGUIUtility.singleLineHeight + 2f;
-            foreach (var r in rows32) h += r.Height + 2f;
-
-            // 64-bit header
-            h += EditorGUIUtility.singleLineHeight + 2f;
-            // 64 rows each single-line (we don’t group 64 in this drawer)
-            for (int i = 0; i < items64.arraySize; i++)
-                h += EditorGUIUtility.singleLineHeight + 2f;
-
-            // Bottom padding
+            float h = EditorGUIUtility.singleLineHeight + 4f; // title
+            if (hasAnyDup) h += EditorGUIUtility.singleLineHeight * 1.5f + 4f;
+            foreach (var r in rows) h += r.Height + 2f;
             return h + 6f;
         }
 
-        // -------------------- GUI --------------------
+        // ---------- GUI ----------
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             PropertyMetadataRegistry.EnsureBound();
@@ -72,8 +66,7 @@ namespace DynamicProperty.Editor {
                 return;
             }
 
-            var items32 = property.FindPropertyRelative("_items32");
-            var items64 = property.FindPropertyRelative("_items64");
+            var (items32, items64) = GetLists(property);
             if (items32 == null || items64 == null)
             {
                 EditorGUI.HelpBox(position, "PropertySet: internal lists not found.", MessageType.Error);
@@ -82,117 +75,70 @@ namespace DynamicProperty.Editor {
 
             float y = position.y;
 
-            // Title
-            var titleRect = new Rect(position.x, y, position.width, EditorGUIUtility.singleLineHeight);
+            // Title + single Add
+            var titleRect = new Rect(position.x, y, position.width - 90f, EditorGUIUtility.singleLineHeight);
+            var addRect = new Rect(position.x + position.width - 90f, y, 90f, EditorGUIUtility.singleLineHeight);
             EditorGUI.LabelField(titleRect, ObjectNames.NicifyVariableName(property.displayName), EditorStyles.boldLabel);
+            if (GUI.Button(addRect, "+ Add", EditorStyles.miniButton))
+            {
+                ShowAddMenuUnified(items32, items64, resolver);
+                SetDefaultValueForNewProperty(items32, resolver);
+            }
             y += titleRect.height + 4f;
 
-            // Build 32 rows & detect duplicates
-            BuildRows32(property, resolver, out var rows32, out var dup32, out var crossDup);
-            bool dup64 = HasDuplicates(items64, out _);
-
-            // Warnings (up to 3)
-            if (dup32)
+            // Rows
+            BuildRowsUnified(property, resolver, out var rows, out bool hasAnyDup);
+            if (hasAnyDup)
             {
                 var warn = new Rect(position.x, y, position.width, EditorGUIUtility.singleLineHeight * 1.5f);
-                EditorGUI.HelpBox(warn, "Duplicate 32-bit parameters detected. Remove extras to avoid undefined behavior.", MessageType.Warning);
-                y += warn.height + 4f;
-            }
-            if (dup64)
-            {
-                var warn = new Rect(position.x, y, position.width, EditorGUIUtility.singleLineHeight * 1.5f);
-                EditorGUI.HelpBox(warn, "Duplicate 64-bit parameters detected. Remove extras to avoid undefined behavior.", MessageType.Warning);
-                y += warn.height + 4f;
-            }
-            if (crossDup)
-            {
-                var warn = new Rect(position.x, y, position.width, EditorGUIUtility.singleLineHeight * 1.5f);
-                EditorGUI.HelpBox(warn, "The same PropertyId exists in BOTH 32-bit and 64-bit lists.", MessageType.Warning);
+                EditorGUI.HelpBox(warn, "Duplicate properties detected. Remove extras to avoid undefined behavior.", MessageType.Warning);
                 y += warn.height + 4f;
             }
 
-            // =================== 32-bit section ===================
-            DrawSectionHeader(position.x, ref y, position.width, "32-bit Properties", () =>
-            {
-                ShowAddMenu(items32, items64, resolver, wantBit64: false);
-            });
-
-            foreach (var row in rows32)
+            foreach (var row in rows)
             {
                 var r = new Rect(position.x, y, position.width, row.Height);
 
                 if (row.IsDuplicate)
-                {
-                    var bg = new Color(1f, 0.85f, 0.85f, 0.35f);
-                    EditorGUI.DrawRect(new Rect(r.x, r.y + 1f, r.width, r.height - 2f), bg);
-                }
+                    EditorGUI.DrawRect(new Rect(r.x, r.y + 1f, r.width, r.height - 2f), new Color(1f, 0.85f, 0.85f, 0.35f));
 
-                if (row.IsGroup)
-                    DrawGroupRow32(r, items32, row, resolver);
+                if (row.IsGroup) DrawGroupRow32(r, row, items32, resolver);
                 else
-                    DrawSingleRow32(r, items32, row.Indices[0], resolver);
+                {
+                    if (row.Bin == Backing.Bit32) DrawSingleRow32(r, items32, row.Indices[0], resolver);
+                    else DrawSingleRow64(r, items64, row.Indices[0], resolver);
+                }
 
                 y += row.Height + 2f;
             }
-
-            // =================== 64-bit section ===================
-            DrawSectionHeader(position.x, ref y, position.width, "64-bit Properties", () =>
-            {
-                ShowAddMenu(items32, items64, resolver, wantBit64: true);
-            });
-
-            for (int i = 0; i < items64.arraySize; i++)
-            {
-                var r = new Rect(position.x, y, position.width, EditorGUIUtility.singleLineHeight);
-                DrawSingleRow64(r, items32, items64, i, resolver); // pass items32 to allow cross-remove checks
-                y += r.height + 2f;
-            }
         }
 
-        // -------------------- Section Header + Add button --------------------
-        private void DrawSectionHeader(float x, ref float y, float width, string title, Action onAdd)
+        // ---------- Build unified rows (group 32-bit float groups; singles: 32 then 64) ----------
+        private void BuildRowsUnified(SerializedProperty property, IPropertyMetadataResolver resolver,
+                                      out List<Row> rows, out bool hasAnyDup)
         {
-            var left = new Rect(x, y, width - 90f, EditorGUIUtility.singleLineHeight);
-            var right = new Rect(x + width - 90f, y, 90f, EditorGUIUtility.singleLineHeight);
-            EditorGUI.LabelField(left, title, EditorStyles.boldLabel);
-            if (GUI.Button(right, "+ Add", EditorStyles.miniButton)) onAdd?.Invoke();
-            y += EditorGUIUtility.singleLineHeight + 2f;
-        }
+            var (items32, items64) = GetLists(property);
+            rows = new List<Row>();
+            hasAnyDup = false;
 
-        // -------------------- Build 32-bit grouped rows --------------------
-        private void BuildRows32(SerializedProperty property,
-                                 IPropertyMetadataResolver resolver,
-                                 out List<Row32> rows,
-                                 out bool hasDup32,
-                                 out bool hasCrossDup)
-        {
-            var items32 = property.FindPropertyRelative("_items32");
-            var items64 = property.FindPropertyRelative("_items64");
-            rows = new List<Row32>();
-            hasDup32 = false;
-            hasCrossDup = false;
-
-            // duplicate maps
-            hasDup32 = HasDuplicates(items32, out var dupMap32);
-
-            // cross-list duplicates
+            bool dup32 = HasDuplicates(items32, out var map32);
+            bool dup64 = HasDuplicates(items64, out var map64);
             var ids32 = CollectIds(items32);
             var ids64 = CollectIds(items64);
-            hasCrossDup = ids32.Overlaps(ids64);
+            bool cross = ids32.Overlaps(ids64);
+            hasAnyDup = dup32 || dup64 || cross;
 
-            // group buckets (by GroupName), only for 32-bit
+            var consumed32 = new HashSet<int>();
             var groupBuckets = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
-            int count = items32.arraySize;
-            for (int i = 0; i < count; i++)
+
+            // 32-bit group buckets (float + group name)
+            for (int i = 0; i < items32.arraySize; i++)
             {
                 int id = items32.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
                 var meta = resolver.Get(id);
                 if (meta == null) continue;
 
-                // only include 32-capable items for this section
-                if (!meta.Bitness.HasFlag(PropertyBitness.Bit32)) continue;
-
-                if (!string.IsNullOrEmpty(meta.GroupName) && meta.Type == PropertyValueType.Float)
+                if (meta.Type == PropertyValueType.Float && !string.IsNullOrEmpty(meta.GroupName))
                 {
                     if (!groupBuckets.TryGetValue(meta.GroupName, out var list))
                     {
@@ -203,210 +149,167 @@ namespace DynamicProperty.Editor {
                 }
             }
 
-            var consumed = new HashSet<int>();
-
-            // grouped rows
+            // Group rows
             foreach (var kvp in groupBuckets)
             {
                 var indices = kvp.Value;
                 if (indices.Count < 2) continue;
 
-                // get group kind by first member
                 var firstMeta = resolver.Get(items32.GetArrayElementAtIndex(indices[0]).FindPropertyRelative("id").intValue);
                 var kind = firstMeta?.GroupKind ?? PropertyGroupKind.None;
 
-                // order by axis or channels
-                List<int> ordered = kind == PropertyGroupKind.Color
-                    ? SortByColorChannels(items32, indices, resolver, out _)
-                    : SortByAxis(items32, indices, resolver);
+                var ordered = kind == PropertyGroupKind.Color
+                            ? SortByColorChannels(items32, indices, resolver, out _)
+                            : SortByAxis(items32, indices, resolver);
 
                 int take = Mathf.Clamp(ordered.Count, 2, 4);
                 var draw = ordered.GetRange(0, take);
-                foreach (var idx in draw) consumed.Add(idx);
+                foreach (var idx in draw) consumed32.Add(idx);
 
-                bool isDup = draw.Any(ix =>
+                bool d = draw.Any(ix =>
                 {
                     int id = items32.GetArrayElementAtIndex(ix).FindPropertyRelative("id").intValue;
-                    return dupMap32.TryGetValue(id, out var cnt) && cnt > 1;
+                    return (map32.TryGetValue(id, out var c) && c > 1) || ids64.Contains(id);
                 });
 
-                rows.Add(new Row32
+                rows.Add(new Row
                 {
+                    Bin = Backing.Bit32,
+                    IsGroup = true,
+                    Kind = kind,
                     Label = kvp.Key,
                     GroupKey = kvp.Key,
                     Indices = draw,
-                    Kind = kind,
-                    IsGroup = true,
-                    IsDuplicate = isDup || (hasCrossDup && draw.Any(ix => ids64.Contains(items32.GetArrayElementAtIndex(ix).FindPropertyRelative("id").intValue))),
+                    IsDuplicate = d,
                     Height = EditorGUIUtility.singleLineHeight
                 });
             }
 
-            // singles
+            // 32-bit singles (non-grouped or unmatched)
             for (int i = 0; i < items32.arraySize; i++)
             {
-                if (consumed.Contains(i)) continue;
+                if (consumed32.Contains(i)) continue;
 
                 int id = items32.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
-                bool isDup = dupMap32.TryGetValue(id, out var cnt) && cnt > 1;
+                bool d = (map32.TryGetValue(id, out var c) && c > 1) || ids64.Contains(id);
 
-                rows.Add(new Row32
+                rows.Add(new Row
                 {
+                    Bin = Backing.Bit32,
+                    IsGroup = false,
+                    Kind = PropertyGroupKind.None,
                     Label = null,
                     GroupKey = null,
                     Indices = new List<int> { i },
-                    Kind = PropertyGroupKind.None,
+                    IsDuplicate = d,
+                    Height = EditorGUIUtility.singleLineHeight
+                });
+            }
+
+            // 64-bit singles
+            for (int i = 0; i < items64.arraySize; i++)
+            {
+                int id = items64.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
+                bool d = (map64.TryGetValue(id, out var c) && c > 1) || ids32.Contains(id);
+
+                rows.Add(new Row
+                {
+                    Bin = Backing.Bit64,
                     IsGroup = false,
-                    IsDuplicate = isDup || (hasCrossDup && ids64.Contains(id)),
+                    Kind = PropertyGroupKind.None,
+                    Label = null,
+                    GroupKey = null,
+                    Indices = new List<int> { i },
+                    IsDuplicate = d,
                     Height = EditorGUIUtility.singleLineHeight
                 });
             }
         }
 
-        // -------------------- Add menu (32 or 64) --------------------
-        private void ShowAddMenu(SerializedProperty items32, SerializedProperty items64,
-                                 IPropertyMetadataResolver resolver, bool wantBit64)
+        // ---------- Add menu (single entry point; routes by PropertyValueType) ----------
+        private void ShowAddMenuUnified(SerializedProperty items32, SerializedProperty items64, IPropertyMetadataResolver resolver)
         {
-            // existing ids across BOTH lists
+            // existing across both
             var existing = CollectIds(items32);
             existing.UnionWith(CollectIds(items64));
 
             var names = resolver.GetAllNames();
             var values = resolver.GetAllValues();
 
-            var groups = new Dictionary<string, (PropertyGroupKind kind, List<(int id, string disp)>)>(StringComparer.OrdinalIgnoreCase);
-            var singles = new List<(int id, string disp)>();
+            var groups32 = new Dictionary<string, (PropertyGroupKind kind, List<(int id, string disp)>)>(StringComparer.OrdinalIgnoreCase);
+            var singles = new List<(int id, string disp, PropertyValueType type)>();
 
             for (int i = 0; i < values.Length; i++)
             {
                 int id = values[i];
+                if (existing.Contains(id)) continue;
+
                 var meta = resolver.Get(id);
                 if (meta == null) continue;
 
-                // filter by bitness target
-                bool ok = wantBit64 ? meta.Bitness.HasFlag(PropertyBitness.Bit64)
-                                    : meta.Bitness.HasFlag(PropertyBitness.Bit32);
-                if (!ok) continue;
+                if (meta.HiddenInEditor || id == 0) continue;
 
                 string disp = meta.DisplayName ?? names[i];
 
-                if (!string.IsNullOrEmpty(meta.GroupName) && meta.Type == PropertyValueType.Float && !wantBit64)
+                // Group only applies to 32-bit float items
+                if (meta.Type == PropertyValueType.Float && !string.IsNullOrEmpty(meta.GroupName))
                 {
-                    // groups only make sense / supported visually in 32-bit float section
-                    if (!groups.TryGetValue(meta.GroupName, out var entry))
+                    if (!groups32.TryGetValue(meta.GroupName, out var entry))
                         entry = (meta.GroupKind, new List<(int, string)>());
                     entry.Item2.Add((id, disp));
-                    groups[meta.GroupName] = entry;
+                    groups32[meta.GroupName] = entry;
                 }
                 else
                 {
-                    if (!existing.Contains(id)) singles.Add((id, disp));
+                    singles.Add((id, disp, meta.Type));
                 }
             }
 
             var menu = new GenericMenu();
 
-            if (!wantBit64)
+            // 32-bit groups (display if any member missing — enforced by existing filter)
+            foreach (var kvp in groups32.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
             {
-                // groups (only show if any member is missing)
-                foreach (var kvp in groups.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                var label = kvp.Key;
+                var kind = kvp.Value.kind;
+                if (kind == PropertyGroupKind.Color) label += "  (Color)";
+                else if (kind == PropertyGroupKind.Vector2) label += "  (Vector2)";
+                else if (kind == PropertyGroupKind.Vector3) label += "  (Vector3)";
+
+                var items = kvp.Value.Item2;
+                menu.AddItem(new GUIContent(label), false, () =>
                 {
-                    var groupName = kvp.Key;
-                    var kind = kvp.Value.kind;
-                    var items = kvp.Value.Item2;
-
-                    bool anyMissing = items.Any(x => !existing.Contains(x.id));
-                    if (!anyMissing) continue;
-
-                    string label = groupName;
-                    if (kind == PropertyGroupKind.Color) label += "  (Color)";
-                    else if (kind == PropertyGroupKind.Vector2) label += "  (Vector2)";
-                    else if (kind == PropertyGroupKind.Vector3) label += "  (Vector3)";
-
-                    menu.AddItem(new GUIContent(label), false, () =>
-                    {
-                        foreach (var (id, _) in items)
-                            if (!existing.Contains(id))
-                                Add32(items32, id, 0);
-                        items32.serializedObject.ApplyModifiedProperties();
-                    });
-                }
-
-                if (menu.GetItemCount() > 0 && singles.Count > 0) menu.AddSeparator("");
+                    foreach (var (id, _) in items) Add32(items32, id, 0);
+                    items32.serializedObject.ApplyModifiedProperties();
+                });
             }
 
-            // singles
-            foreach (var (id, disp) in singles.OrderBy(s => s.disp, StringComparer.OrdinalIgnoreCase))
+            if (menu.GetItemCount() > 0 && singles.Count > 0) menu.AddSeparator("");
+
+            // Singles: route by type
+            foreach (var entry in singles.OrderBy(s => s.disp, StringComparer.OrdinalIgnoreCase))
             {
-                menu.AddItem(new GUIContent(disp), false, () =>
+                bool is64 = Is64Type(entry.type);
+                var content = new GUIContent(entry.disp + (is64 ? "  (64)" : "  (32)"));
+                menu.AddItem(content, false, () =>
                 {
-                    if (wantBit64) Add64(items64, id, 0L);
-                    else Add32(items32, id, 0);
+                    if (is64) Add64(items64, entry.id, 0L);
+                    else Add32(items32, entry.id, 0);
                     items32.serializedObject.ApplyModifiedProperties();
                 });
             }
 
             if (menu.GetItemCount() == 0)
-                menu.AddDisabledItem(new GUIContent(wantBit64 ? "No unused 64-bit parameters" : "No unused 32-bit parameters"));
+                menu.AddDisabledItem(new GUIContent("No unused properties"));
 
             menu.ShowAsContext();
         }
 
-        private static HashSet<int> CollectIds(SerializedProperty list)
-        {
-            var set = new HashSet<int>();
-            for (int i = 0; i < list.arraySize; i++)
-                set.Add(list.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue);
-            return set;
-        }
-
-        private static bool HasDuplicates(SerializedProperty list, out Dictionary<int, int> counts)
-        {
-            counts = new Dictionary<int, int>();
-            for (int i = 0; i < list.arraySize; i++)
-            {
-                int id = list.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
-                counts.TryGetValue(id, out int c);
-                counts[id] = c + 1;
-            }
-            foreach (var kv in counts)
-                if (kv.Value > 1) return true;
-            return false;
-        }
-
-        private static void Add32(SerializedProperty items32, int id, int raw = 0)
-        {
-            int newIndex = items32.arraySize;
-            items32.arraySize++;
-            var e = items32.GetArrayElementAtIndex(newIndex);
-            e.FindPropertyRelative("id").intValue = id;
-            e.FindPropertyRelative("rawValue").intValue = raw;
-        }
-
-        private static void Add64(SerializedProperty items64, int id, long raw = 0L)
-        {
-            int newIndex = items64.arraySize;
-            items64.arraySize++;
-            var e = items64.GetArrayElementAtIndex(newIndex);
-            e.FindPropertyRelative("id").intValue = id;
-            e.FindPropertyRelative("rawValue").longValue = raw;
-        }
-
-        private static void RemoveByIds(SerializedProperty list, IEnumerable<int> ids)
-        {
-            var idSet = new HashSet<int>(ids);
-            for (int i = list.arraySize - 1; i >= 0; i--)
-            {
-                int id = list.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
-                if (idSet.Contains(id)) list.DeleteArrayElementAtIndex(i);
-            }
-        }
-
-        // -------------------- 32-bit: Group Row --------------------
-        private void DrawGroupRow32(Rect r, SerializedProperty items32, Row32 row, IPropertyMetadataResolver resolver)
+        // ---------- 32-bit grouped row ----------
+        private void DrawGroupRow32(Rect r, Row row, SerializedProperty items32, IPropertyMetadataResolver resolver)
         {
             var minusRect = new Rect(r.xMax - 22f, r.y, 20f, r.height);
-            if (GUI.Button(minusRect, "−", EditorStyles.miniButton))
+            if (GUI.Button(minusRect, "x", EditorStyles.miniButton))
             {
                 var ids = row.Indices.Select(ix => items32.GetArrayElementAtIndex(ix).FindPropertyRelative("id").intValue);
                 RemoveByIds(items32, ids);
@@ -414,13 +317,11 @@ namespace DynamicProperty.Editor {
                 return;
             }
 
-            float labelWidth = EditorGUIUtility.labelWidth;
-            var labelRect = new Rect(r.x, r.y, labelWidth, r.height);
-            var fieldRect = new Rect(r.x + labelWidth, r.y, r.width - labelWidth - 24f, r.height);
-
+            float third = r.width / 3f;
+            var labelRect = new Rect(r.x, r.y, third, r.height);
+            var fieldRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 27f, r.height);
             EditorGUI.LabelField(labelRect, row.Label);
 
-            // read floats
             int comp = row.Indices.Count;
             var vals = new float[comp];
             for (int i = 0; i < comp; i++)
@@ -432,7 +333,6 @@ namespace DynamicProperty.Editor {
 
             if (row.Kind == PropertyGroupKind.Color && comp >= 3)
             {
-                // map to RGBA order by display name suffix
                 var ordered = SortByColorChannels(items32, row.Indices, resolver, out int use);
                 var rgba = new float[4] { 1, 1, 1, 1 };
                 for (int i = 0; i < use; i++)
@@ -461,7 +361,6 @@ namespace DynamicProperty.Editor {
             }
             else
             {
-                // vector 2/3/4
                 EditorGUI.BeginChangeCheck();
                 switch (comp)
                 {
@@ -495,7 +394,7 @@ namespace DynamicProperty.Editor {
             }
         }
 
-        // -------------------- 32-bit: Single Row --------------------
+        // ---------- 32-bit single ----------
         private void DrawSingleRow32(Rect r, SerializedProperty items32, int index, IPropertyMetadataResolver resolver)
         {
             var elem = items32.GetArrayElementAtIndex(index);
@@ -503,26 +402,23 @@ namespace DynamicProperty.Editor {
             var rawProp = elem.FindPropertyRelative("rawValue");
 
             int id = idProp.intValue;
-            var meta = resolver.Get(id) ?? new PropertyMetadata { Type = PropertyValueType.Int, Bitness = PropertyBitness.Bit32 };
+            var meta = resolver.Get(id) ?? new PropertyMetadata { Type = PropertyValueType.Int };
             string label = meta.DisplayName ?? Enum.GetName(resolver.BoundEnumType, id) ?? $"ID {id}";
 
             float third = r.width / 3f;
             var keyRect = new Rect(r.x, r.y, third, r.height);
-            var valRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 24f, r.height);
+            var valRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 27f, r.height);
             var minusRect = new Rect(r.xMax - 22f, r.y, 20f, r.height);
 
-            // key label
             EditorGUI.LabelField(keyRect, label);
 
-            // remove
-            if (GUI.Button(minusRect, "−", EditorStyles.miniButton))
+            if (GUI.Button(minusRect, "x", EditorStyles.miniButton))
             {
                 items32.DeleteArrayElementAtIndex(index);
                 items32.serializedObject.ApplyModifiedProperties();
                 return;
             }
 
-            // draw value
             switch (meta.Type)
             {
                 case PropertyValueType.Float:
@@ -550,49 +446,31 @@ namespace DynamicProperty.Editor {
                         rawProp.intValue = v;
                         break;
                     }
-                case PropertyValueType.DateTimeShort:
-                    {
-                        long ticks = DateTime.UnixEpoch.AddMinutes(rawProp.intValue).Ticks;
-                        ticks = PropertyDrawerUtil.DrawDateTimeTicks(valRect, ticks, meta.Step ?? 60f);
-                        int minutes = (int)Mathf.Clamp((float)TimeSpan.FromTicks(ticks).TotalMinutes, int.MinValue, int.MaxValue);
-                        rawProp.intValue = minutes;
-                        break;
-                    }
-                case PropertyValueType.TimeSpanShort:
-                    {
-                        long ticks = TimeSpan.FromMinutes(rawProp.intValue).Ticks;
-                        ticks = PropertyDrawerUtil.DrawTimeSpanTicks(valRect, ticks, meta.Step ?? 5f, meta.Min, meta.Max);
-                        int minutes = (int)Mathf.Clamp((float)TimeSpan.FromTicks(ticks).TotalMinutes, int.MinValue, int.MaxValue);
-                        rawProp.intValue = minutes;
-                        break;
-                    }
                 default:
                     EditorGUI.HelpBox(valRect, $"Type not handled (32): {meta.Type}", MessageType.None);
                     break;
             }
         }
 
-        // -------------------- 64-bit: Single Row --------------------
-        private void DrawSingleRow64(Rect r, SerializedProperty items32, SerializedProperty items64, int index, IPropertyMetadataResolver resolver)
+        // ---------- 64-bit single ----------
+        private void DrawSingleRow64(Rect r, SerializedProperty items64, int index, IPropertyMetadataResolver resolver)
         {
             var elem = items64.GetArrayElementAtIndex(index);
             var idProp = elem.FindPropertyRelative("id");
             var rawProp = elem.FindPropertyRelative("rawValue");
 
             int id = idProp.intValue;
-            var meta = resolver.Get(id) ?? new PropertyMetadata { Type = PropertyValueType.Long, Bitness = PropertyBitness.Bit64 };
+            var meta = resolver.Get(id) ?? new PropertyMetadata { Type = PropertyValueType.Long };
             string label = meta.DisplayName ?? Enum.GetName(resolver.BoundEnumType, id) ?? $"ID {id}";
 
             float third = r.width / 3f;
             var keyRect = new Rect(r.x, r.y, third, r.height);
-            var valRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 24f, r.height);
+            var valRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 27f, r.height);
             var minusRect = new Rect(r.xMax - 22f, r.y, 20f, r.height);
 
-            // key label (readonly)
             EditorGUI.LabelField(keyRect, label);
 
-            // remove
-            if (GUI.Button(minusRect, "−", EditorStyles.miniButton))
+            if (GUI.Button(minusRect, "x", EditorStyles.miniButton))
             {
                 items64.DeleteArrayElementAtIndex(index);
                 items64.serializedObject.ApplyModifiedProperties();
@@ -604,29 +482,6 @@ namespace DynamicProperty.Editor {
 
             switch (meta.Type)
             {
-                case PropertyValueType.Float:
-                    {
-                        // Allowed if you choose to store 32f in 64 container; else omit
-                        float v = u.asFloat;
-                        v = PropertyDrawerUtil.DrawFloat(valRect, v, meta.Min, meta.Max, meta.Step);
-                        u.asFloat = v;
-                        rawProp.longValue = u.raw;
-                        break;
-                    }
-                case PropertyValueType.Int:
-                    {
-                        int v = PropertyDrawerUtil.DrawInt(valRect, u.asInt, meta.Min, meta.Max, meta.Step);
-                        u.asInt = v;
-                        rawProp.longValue = u.raw;
-                        break;
-                    }
-                case PropertyValueType.Bool:
-                    {
-                        bool v = PropertyDrawerUtil.DrawBool(valRect, u.asBool);
-                        u.asBool = v;
-                        rawProp.longValue = u.raw;
-                        break;
-                    }
                 case PropertyValueType.Double:
                     {
                         double v = EditorGUI.DoubleField(valRect, u.asDouble);
@@ -641,18 +496,40 @@ namespace DynamicProperty.Editor {
                         rawProp.longValue = u.raw;
                         break;
                     }
+                case PropertyValueType.Int:
+                    {
+                        int v = PropertyDrawerUtil.DrawInt(valRect, u.asInt, meta.Min, meta.Max, meta.Step);
+                        u.asInt = v;
+                        rawProp.longValue = u.raw;
+                        break;
+                    }
+                case PropertyValueType.Float:
+                    {
+                        float v = PropertyDrawerUtil.DrawFloat(valRect, u.asFloat, meta.Min, meta.Max, meta.Step);
+                        u.asFloat = v;
+                        rawProp.longValue = u.raw;
+                        break;
+                    }
+                case PropertyValueType.Bool:
+                    {
+                        bool v = PropertyDrawerUtil.DrawBool(valRect, u.asBool);
+                        u.asBool = v;
+                        rawProp.longValue = u.raw;
+                        break;
+                    }
                 case PropertyValueType.DateTime:
                     {
                         long ticks = u.raw;
                         DateTime dt = new DateTime(ticks, DateTimeKind.Utc);
                         string txt = dt.ToString("yyyy-MM-dd HH:mm:ss");
+                        valRect.width -= 53;
                         string newTxt = EditorGUI.DelayedTextField(valRect, txt);
                         if (DateTime.TryParse(newTxt, out var parsed)) dt = parsed;
 
                         // Optional stepper (hour default)
-                        float stepSec = meta.Step.HasValue && meta.Step.Value > 0f ? meta.Step.Value : 3600f;
-                        var minusR = new Rect(valRect.xMax - 54, r.y, 25, r.height);
-                        var plusR = new Rect(valRect.xMax - 27, r.y, 25, r.height);
+                        float stepSec = meta.Step.HasValue && meta.Step.Value > 0f ? meta.Step.Value : 60;
+                        var minusR = new Rect(valRect.xMax + 2, r.y, 25, r.height);
+                        var plusR = new Rect(valRect.xMax + 28, r.y, 25, r.height);
                         if (GUI.Button(minusR, "-")) dt = dt.AddSeconds(-stepSec);
                         if (GUI.Button(plusR, "+")) dt = dt.AddSeconds(stepSec);
 
@@ -666,13 +543,14 @@ namespace DynamicProperty.Editor {
 
                         string fmt = ts.Days != 0 ? @"d\.hh\:mm\:ss" : @"hh\:mm\:ss";
                         EditorGUI.BeginChangeCheck();
+                        valRect.width -= 53;
                         string txt = EditorGUI.DelayedTextField(valRect, ts.ToString(fmt, System.Globalization.CultureInfo.InvariantCulture));
                         if (EditorGUI.EndChangeCheck() && TimeSpan.TryParse(txt, out var parsed))
                             ts = parsed;
 
-                        double stepSec = meta.Step.HasValue && meta.Step.Value > 0f ? meta.Step.Value : 60d;
-                        var minusR = new Rect(valRect.xMax - 54, r.y, 25, r.height);
-                        var plusR = new Rect(valRect.xMax - 27, r.y, 25, r.height);
+                        double stepSec = meta.Step.HasValue && meta.Step.Value > 0f ? meta.Step.Value : 5;
+                        var minusR = new Rect(valRect.xMax + 2, r.y, 25, r.height);
+                        var plusR = new Rect(valRect.xMax + 28, r.y, 25, r.height);
                         if (GUI.Button(minusR, "-")) ts -= TimeSpan.FromSeconds(stepSec);
                         if (GUI.Button(plusR, "+")) ts += TimeSpan.FromSeconds(stepSec);
 
@@ -695,8 +573,7 @@ namespace DynamicProperty.Editor {
                         if (isFlags)
                         {
                             enumVal = EditorGUI.MaskField(valRect, enumVal, Enum.GetNames(enumType));
-                            int all = 0;
-                            foreach (var v in Enum.GetValues(enumType)) all |= Convert.ToInt32(v);
+                            int all = 0; foreach (var v in Enum.GetValues(enumType)) all |= Convert.ToInt32(v);
                             enumVal &= all;
                         }
                         else
@@ -717,7 +594,58 @@ namespace DynamicProperty.Editor {
             }
         }
 
-        // -------------------- Helpers: sorting & write --------------------
+        // ---------- Helpers ----------
+        private static (SerializedProperty items32, SerializedProperty items64) GetLists(SerializedProperty property)
+            => (property.FindPropertyRelative("_items32"), property.FindPropertyRelative("_items64"));
+
+        private static HashSet<int> CollectIds(SerializedProperty list)
+        {
+            var set = new HashSet<int>();
+            for (int i = 0; i < list.arraySize; i++)
+                set.Add(list.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue);
+            return set;
+        }
+
+        private static bool HasDuplicates(SerializedProperty list, out Dictionary<int, int> counts)
+        {
+            counts = new Dictionary<int, int>();
+            for (int i = 0; i < list.arraySize; i++)
+            {
+                int id = list.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
+                counts.TryGetValue(id, out var c);
+                counts[id] = c + 1;
+            }
+            return counts.Any(k => k.Value > 1);
+        }
+
+        private static void Add32(SerializedProperty list, int id, int raw = 0)
+        {
+            int newIndex = list.arraySize;
+            list.arraySize++;
+            var e = list.GetArrayElementAtIndex(newIndex);
+            e.FindPropertyRelative("id").intValue = id;
+            e.FindPropertyRelative("rawValue").intValue = raw;
+        }
+
+        private static void Add64(SerializedProperty list, int id, long raw = 0L)
+        {
+            int newIndex = list.arraySize;
+            list.arraySize++;
+            var e = list.GetArrayElementAtIndex(newIndex);
+            e.FindPropertyRelative("id").intValue = id;
+            e.FindPropertyRelative("rawValue").longValue = raw;
+        }
+
+        private static void RemoveByIds(SerializedProperty list, IEnumerable<int> ids)
+        {
+            var idSet = new HashSet<int>(ids);
+            for (int i = list.arraySize - 1; i >= 0; i--)
+            {
+                int id = list.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
+                if (idSet.Contains(id)) list.DeleteArrayElementAtIndex(i);
+            }
+        }
+
         private List<int> SortByAxis(SerializedProperty items32, List<int> indices, IPropertyMetadataResolver resolver)
         {
             int Score(string name)
@@ -773,5 +701,55 @@ namespace DynamicProperty.Editor {
             var u = new ValueUnion32 { asFloat = value };
             e.FindPropertyRelative("rawValue").intValue = u.raw;
         }
+
+        private void SetDefaultValueForNewProperty(SerializedProperty items32, IPropertyMetadataResolver resolver)
+        {
+            // Iterate through all items (32-bit properties)
+            for (int i = 0; i < items32.arraySize; i++)
+            {
+                var item = items32.GetArrayElementAtIndex(i);
+                int id = item.FindPropertyRelative("id").intValue;
+
+                // Fetch the metadata for this property
+                var meta = resolver.Get(id);
+                if (meta != null && meta.DefaultValue != null)
+                {
+                    var rawValueProperty = item.FindPropertyRelative("rawValue");
+
+                    // Check if the property has a default value and handle by type
+                    switch (meta.Type)
+                    {
+                        case PropertyValueType.Bool:
+                            rawValueProperty.intValue = (bool)meta.DefaultValue ? 1 : 0;
+                            break;
+                        case PropertyValueType.Int:
+                            rawValueProperty.intValue = (int)meta.DefaultValue;
+                            break;
+                        case PropertyValueType.Double:
+                            rawValueProperty.doubleValue = (double)meta.DefaultValue;
+                            break;
+                        case PropertyValueType.Long:
+                            rawValueProperty.longValue = (long)meta.DefaultValue;
+                            break;
+                        case PropertyValueType.Enum:
+                            var enumValue = (Enum)meta.DefaultValue;
+                            rawValueProperty.intValue = Convert.ToInt32(enumValue);
+                            break;
+                        case PropertyValueType.Float:
+                            rawValueProperty.floatValue = (float)meta.DefaultValue;
+                            break;
+
+                        // Handle other types (e.g., Vectors, Color, DateTime, TimeSpan)
+                        default:
+                            Debug.LogWarning($"Unhandled PropertyValueType: {meta.Type}");
+                            break;
+                    }
+                }
+            }
+
+            items32.serializedObject.ApplyModifiedProperties();
+        }
+
+
     }
 }

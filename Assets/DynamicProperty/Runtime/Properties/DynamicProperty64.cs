@@ -6,10 +6,15 @@ namespace DynamicProperty
     [Serializable]
     public struct DynamicProperty64
     {
-        [SerializeField] public int id;       // game-plugged enum value
-        [SerializeField] public long rawValue; // union storage
+        [SerializeField] int id;       // game-plugged enum value
+        [SerializeField] long rawValue; // union storage
 
-        public int Id => id;
-        public long RawValue { get => rawValue; set => rawValue = value; }
+        public DynamicProperty64(int id) : this()
+        {
+            this.id = id;
+        }
+
+        public readonly int Id => id;
+        public long RawValue { readonly get => rawValue; set => rawValue = value; }
     }
 }

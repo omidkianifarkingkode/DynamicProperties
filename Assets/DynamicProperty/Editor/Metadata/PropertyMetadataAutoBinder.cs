@@ -1,13 +1,15 @@
-﻿using DynamicProperty.Editor;
-using UnityEditor;
+﻿using UnityEditor;
 
-[InitializeOnLoad]
-public static class PropertyMetadataAutoBinder
+namespace DynamicProperty.Editor
 {
-    static PropertyMetadataAutoBinder()
+    [InitializeOnLoad]
+    public static class PropertyMetadataAutoBinder
     {
-        PropertyMetadataRegistry.Bind(DynamicPropertiesSettings.instance.EnumType);
-        AssemblyReloadEvents.afterAssemblyReload += () =>
+        static PropertyMetadataAutoBinder()
+        {
             PropertyMetadataRegistry.Bind(DynamicPropertiesSettings.instance.EnumType);
+            AssemblyReloadEvents.afterAssemblyReload += () =>
+                PropertyMetadataRegistry.Bind(DynamicPropertiesSettings.instance.EnumType);
+        }
     }
 }

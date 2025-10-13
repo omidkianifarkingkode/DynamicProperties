@@ -10,7 +10,7 @@ namespace DynamicProperty
     /// A unified set that stores 32- and 64-bit properties in two serialized lists,
     /// but exposes a single API + O(1) lookups.
     [Serializable]
-    public sealed class PropertySet : ISerializationCallbackReceiver
+    public sealed partial class PropertySet : ISerializationCallbackReceiver
     {
         [SerializeField] private List<DynamicProperty32> _items32 = new();
         [SerializeField] private List<DynamicProperty64> _items64 = new();

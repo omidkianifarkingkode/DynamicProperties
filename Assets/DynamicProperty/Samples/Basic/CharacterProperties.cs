@@ -22,20 +22,20 @@ public enum CharacterProperties
     [PropertyType(typeof(TimeSpan)), Step(60)]
     RespawnDelay = 5,
 
-    [PropertyType(typeof(Vector3), "Spawn Position")]
+    [PropertyType(typeof(Vector3)), Group("Spawn Position")]
     PosX = 6,
-    [PropertyType(typeof(Vector3), "Spawn Position")]
+    [PropertyType(typeof(Vector3)), Group("Spawn Position")]
     PosY = 7,
-    [PropertyType(typeof(Vector3), "Spawn Position")]
+    [PropertyType(typeof(Vector3)), Group("Spawn Position")]
     PosZ = 8,
 
-    [PropertyType(typeof(Color), "Shadow Color")]
+    [PropertyType(typeof(Color)), Group("Shadow Color")]
     ColorR = 10,
-    [PropertyType(typeof(Color), "Shadow Color")]
+    [PropertyType(typeof(Color)), Group("Shadow Color")]
     ColorG = 11,
-    [PropertyType(typeof(Color), "Shadow Color")]
+    [PropertyType(typeof(Color)), Group("Shadow Color")]
     ColorB = 12,
-    [PropertyType(typeof(Color),"Shadow Color")]
+    [PropertyType(typeof(Color)), Group("Shadow Color")]
     ColorA = 13,
     [DisplayName("Tag"), PropertyType(typeof(TagType))]
     Tag = 14,

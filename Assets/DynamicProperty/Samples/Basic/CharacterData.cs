@@ -18,6 +18,10 @@ public class CharacterData : ScriptableObject
 #else
         Debug.Log(Properties != null ? Properties.ToString() : "<null>", this);
 #endif
+
+        Debug.Log(Properties.PosX());
+        Debug.Log(Properties.ShadowColor());
+        Debug.Log(Properties.SpawnPosition());
     }
 }
 

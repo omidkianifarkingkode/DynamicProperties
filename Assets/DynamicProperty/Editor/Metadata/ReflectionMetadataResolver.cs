@@ -73,25 +73,21 @@ namespace DynamicProperty.Editor
                 {
                     meta.Type = PropertyValueType.Float;
                     meta.GroupKind = PropertyGroupKind.Vector4;
-                    meta.GroupName = propertyTypeAttr.GroupName ?? "Vector4 Group";
                 }
                 else if (propertyType == typeof(Vector3)) // Special case for Vector3 grouping
                 {
                     meta.Type = PropertyValueType.Float;
                     meta.GroupKind = PropertyGroupKind.Vector3;
-                    meta.GroupName = propertyTypeAttr.GroupName ?? "Vector3 Group";
                 }
                 else if (propertyType == typeof(Vector2)) // Special case for Vector3 grouping
                 {
                     meta.Type = PropertyValueType.Float;
                     meta.GroupKind = PropertyGroupKind.Vector2;
-                    meta.GroupName = propertyTypeAttr.GroupName ?? "Vector2 Group";
                 }
                 else if (propertyType == typeof(Color)) // Special case for Color grouping
                 {
                     meta.Type = PropertyValueType.Float;
                     meta.GroupKind = PropertyGroupKind.Color;
-                    meta.GroupName = propertyTypeAttr.GroupName ?? "Color Group";
                 }
 
                 if (propertyTypeAttr.DefaultValue != null)

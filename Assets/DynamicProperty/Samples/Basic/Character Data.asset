@@ -18,10 +18,20 @@ MonoBehaviour:
       rawValue: 100
     - id: 2
       rawValue: 1
-    - id: 14
+    - id: 10
       rawValue: 0
+    - id: 11
+      rawValue: 0
+    - id: 12
+      rawValue: 0
+    - id: 13
+      rawValue: 0
+    - id: 14
+      rawValue: 7
     - id: 3
       rawValue: 0
     _items64:
     - id: 4
-      rawValue: 6000000000
+      rawValue: 638713695000000000
+    - id: 5
+      rawValue: 4200000000

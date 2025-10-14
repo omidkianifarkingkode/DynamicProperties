@@ -11,7 +11,7 @@ Built to solve the “sparse data model” problem in large projects.
 2. In `Packages/manifest.json`, add:
 
 ```json
-"com.kingkode.dynamic-property": "https://github.com/omidkianifarkingkode/DynamicProperties.git?path=Assets/DynamicProperty"
+"com.kingkode.dynamic-property": "https://github.com/omidkianifarkingkode/DynamicProperties.git?path=DynamicProperties.Unity/Assets/DynamicProperty"
 ```
 
 Unity will automatically fetch the package.

@@ -1,9 +1,9 @@
-# Dynamic Properties for Unity
 
-A flexible system for defining and editing game data properties (int, float, bool, enum, DateTime, TimeSpan, etc.) with metadata-driven drawers in the Unity Inspector.  
-Supports **32-bit and 64-bit storage**, custom attributes for type/range/step, and game-specific enums bound via Project Settings.
+# 🧠 Dynamic Properties for Unity
 
----
+A powerful, metadata-driven property system for Unity.  
+Define, store, and edit flexible game data properties (int, float, bool, enum, DateTime, TimeSpan, etc.) — with efficient storage, runtime access in O(1), and intelligent editor integration.  
+Built to solve the “sparse data model” problem in large projects.
 
 ## 📦 Installation
 
@@ -14,109 +14,157 @@ Supports **32-bit and 64-bit storage**, custom attributes for type/range/step, a
 "com.kingkode.dynamic-property": "https://github.com/omidkianifarkingkode/DynamicProperties.git?path=Assets/DynamicProperty"
 ```
 
-3. Unity will fetch the package automatically.
+Unity will automatically fetch the package.
 
 ## 🧩 Importing the Example
 
-You can explore the Basic Sample provided with the package:
+You can explore the included Basic Sample:
 
-1. Open Window → Package Manager.
-
-2. Select Dynamic Property from the list.
-
+1. Open `Window → Package Manager`.
+2. Select `Dynamic Property` from the list.
 3. Expand the Samples section.
-
 4. Click Import next to Basic Example.
 
-This will import the example folder from:
+Unity will import the example into:
 
-Packages/com.kingkode.dynamic-property/Samples~/Basic
-
-into:
-```
+```text
 Assets/Samples/Dynamic Property/1.0.0/Basic
 ```
-The sample includes:
 
-* A CharacterProperties enum with metadata attributes
+Then, create the example asset manually:
 
-* A CharacterData ScriptableObject using DynamicProperty32 and DynamicProperty64
+1. Go to `Assets → Create → DynamicProperty → Create Sample Character Data`.
 
-After importing, you must create the ScriptableObject manually using Unity’s menu:
-```
-➡️ Assets → Create → DynamicProperty → Create Sample Character Data
-```
+The sample includes a metadata-decorated enum and a ready-to-use `CharacterData` ScriptableObject.
 
-Then, select the created asset to see how dynamic properties appear and behave in the Inspector.
+## 🧩 Why Dynamic Properties?
 
-## 🚀 Usage & Setup
+Traditional Unity data models often define dozens of serialized fields — but most remain unused.  
+This leads to sparse data models: many fields, few meaningful values, wasted memory, and rigid code.  
 
-1. Define your enum for property IDs in your game assembly:
+Dynamic Properties solve this by storing game data as a list of key-value pairs instead of hard-coded fields.  
+
+However, this raises new challenges — and here’s how the package addresses them:
+
+### ⚙️ 1. Variant Storage (Multi-Type Support)
+
+Storing mixed types in a single list is tricky.  
+Dynamic Properties unify all values into:
+
+- `int` (32-bit) for small data (int, float, bool, enums, etc.)
+- `long` (64-bit) for large or precise data (double, DateTime, TimeSpan, 64-bit enums)
+
+Other types are converted seamlessly to one of these primitives.  
+This keeps storage compact, serialization-safe, and fast.
+
+### ⚡ 2. O(1) Property Lookup
+
+Naively iterating a list for every property lookup is slow.  
+Dynamic Properties automatically build a dictionary cache (`PropertySet`) after Unity loads, giving:
+
+- O(1) access time for reads and writes — even across thousands of entries.
+
+### 🧰 3. Metadata-Driven Editor
+
+Instead of hardcoding how each property is drawn, Dynamic Properties use attributes on your enum definitions:
 
 ```csharp
 public enum CharacterProperties
 {
-    [PropertyType(PropertyValueType.Int), DisplayName("Health"), MinMax(0, 9999)]
-    Health,
-
-    [PropertyType(PropertyValueType.Float), DisplayName("Speed"), MinMax(0, 50), Step(0.1f)]
-    Speed,
-
-    [PropertyType(PropertyValueType.Enum), PropertyEnum(typeof(WeaponType))]
-    WeaponType,
+    [PropertyType(typeof(int)), MinMax(0, 1000)] Health,
+    [PropertyType(typeof(bool))] IsBoss,
+    [PropertyType(typeof(DateTime))] SpawnTime
 }
 ```
 
-2. Bind your enum in Editor
-```
-Go to Edit → Project Settings → Dynamic Properties.
-```
-Select your CharacterProperties enum in the dropdown.
+The editor automatically:
+- Displays the right drawer for each type.
+- Applies min/max or step constraints.
+- Groups related values (e.g., Vector3, Color).
+- No custom inspector code required.
 
-The system now reflects your metadata everywhere.
+### 🧬 4. Strongly-Typed Access via Source Generator
 
-3. Use in ScriptableObjects
-Add fields with DynamicProperty32 or DynamicProperty64:
+Using raw keys like `GetInt(Health)` works but isn’t ergonomic.  
+Dynamic Properties include a Roslyn Source Generator that creates extension methods based on your enum definitions.
+
+Example:
+
+```csharp
+// Your enum
+[PropertyType(typeof(int))] Health,
+[PropertyType(typeof(bool))] IsBoss,
+
+// Generated
+set.Health();
+set.SetHealth(50);
+set.HasHealth();
+
+set.IsBoss();
+set.SetIsBoss(true);
+```
+
+Grouped values (like Vector3 or Color) also get high-level accessors:
+
+```csharp
+set.GetSpawnPosition();   // Returns Vector3
+set.SetSpawnPosition(v3);
+```
+
+This means type-safe, auto-complete-friendly, semantic code — no manual boilerplate.
+
+## 🚀 Usage Overview
+
+### 1️⃣ Define your enum
+
+```csharp
+public enum CharacterProperties
+{
+    [PropertyType(typeof(int)), MinMax(0, 1000)]
+    Health,
+
+    [PropertyType(typeof(bool))]
+    IsBoss,
+
+    [PropertyType(typeof(Vector3)), Group("Spawn Position")]
+    PosX, PosY, PosZ
+}
+```
+
+### 2️⃣ Bind your enum
+
+Go to `Edit → Project Settings → Dynamic Properties` and assign your enum type (`CharacterProperties`).
+
+### 3️⃣ Use it in data objects
 
 ```csharp
 [CreateAssetMenu(menuName = "Data/Character")]
 public class CharacterData : ScriptableObject
 {
-    public List<DynamicProperty32> stats32;
-    public List<DynamicProperty64> stats64;
+    public DynamicProperty.PropertySet Properties;
 }
 ```
 
-In the Inspector you’ll see dropdowns for keys and value fields adapting automatically.
+### 4️⃣ Access values in code
 
-## 📝 Core Notes
+```csharp
+// Generated accessors
+int health = Properties.Health();
+Properties.SetHealth(80);
 
-Storage
-
-DynamicProperty32 = int-backed (ints, floats, bools, short enums).
-
-DynamicProperty64 = long-backed (longs, doubles, 64-bit enums, ticks-based DateTimes/TimeSpans).
-
-Metadata
-Use attributes (PropertyType, DisplayName, MinMax, Step, PropertyEnum) on your enum fields to drive Inspector behavior.
-
-Editor Persistence
-Binding is stored in ProjectSettings/DynamicProperties.asset (no stray assets in your project).
-Binding survives domain reloads & recompiles automatically.
-
-Extensible
-You can add new property value types and drawers with minimal boilerplate.
-
-## ✅ Example
-
-In the Inspector, with the example PropertyId above:
+Vector3 pos = Properties.GetSpawnPosition();
+Properties.SetSpawnPosition(new Vector3(0, 1, 0));
 ```
-Health shows as an int slider (0–9999).
 
-Speed shows as a float field with step 0.1.
+## 🧱 Key Features
 
-WeaponType shows as a dropdown of enum values.
-```
-## License
----
-This library is under the MIT License.
+- ✅ Strongly-typed & attribute-driven property metadata
+- ⚡ O(1) runtime lookups with auto dictionary serialization
+- 🧩 Extensible editor drawers
+- 🧠 Source generator for semantic property access
+- 🧮 Compact storage (32/64-bit core types)
+- 💾 Works in runtime & editor assemblies
+
+## 📄 License
+
+MIT License © 2025 Omid Kiani (KingKode)

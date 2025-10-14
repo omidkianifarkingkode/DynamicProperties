@@ -83,6 +83,7 @@ Flowcast.Unity/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 [Aa]ssets/Unity.VisualScripting.Generated/VisualScripting.Core/Property Providers.meta
 
 
-*.csproj
-*.sln
+
 .vsconfig
+DynamicProperties.Unity/*.sln
+DynamicProperties.Unity/*.csproj

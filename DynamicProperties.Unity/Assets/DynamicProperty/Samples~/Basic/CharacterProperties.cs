@@ -37,11 +37,21 @@ public enum CharacterProperties
     ColorB = 12,
     [PropertyType(typeof(Color)), Group("Shadow Color")]
     ColorA = 13,
-    [DisplayName("Tag"), PropertyType(typeof(TagType))]
-    Tag = 14,
+    [PropertyType(typeof(AttackType))]
+    AttackType = 14,
+    [PropertyType(typeof(DamageType))]
+    DamageType = 15,
+    [PropertyType(typeof(EnemyType))]
+    EnemyType = 16,
 }
 
 public enum WeaponType { None, Sword, Bow, Staff }
 
 [Flags]
-public enum TagType { Tag1 = 1, Tag2 = 2, Tag3 = 4 }
+public enum AttackType { Normal = 1, Ranged = 2, Melee = 4 }
+
+[Flags]
+public enum DamageType { Normal = 1, Fire = 2, Ice = 4 }
+
+[Flags]
+public enum EnemyType { Normal = 1, Elite = 2, Boss = 4 }

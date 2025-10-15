@@ -21,7 +21,7 @@ public class CharacterData : ScriptableObject
 
         Debug.Log(Properties.PosX());
         Debug.Log(Properties.ShadowColor());
-        Debug.Log(Properties.SpawnPosition());
+        Debug.Log(Properties.SpawnPosition());;
     }
 }
 

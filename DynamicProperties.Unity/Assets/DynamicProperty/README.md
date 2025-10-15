@@ -156,6 +156,11 @@ Vector3 pos = Properties.GetSpawnPosition();
 Properties.SetSpawnPosition(new Vector3(0, 1, 0));
 ```
 
+You can enable or disable the DynamicProperty Source Generator anytime from:
+```text
+Tools → Dynamic Property → Source Generator → Enabled in Unity.
+```
+
 ## 🧱 Key Features
 
 - ✅ Strongly-typed & attribute-driven property metadata
@@ -167,4 +172,4 @@ Properties.SetSpawnPosition(new Vector3(0, 1, 0));
 
 ## 📄 License
 
-MIT License © 2025 Omid Kiani (KingKode)
+MIT License © 2025 Omid Kianifar (@KingKode)

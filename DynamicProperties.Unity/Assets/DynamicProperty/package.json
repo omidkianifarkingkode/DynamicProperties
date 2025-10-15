@@ -5,7 +5,7 @@
   "description": "A flexible metadata-driven property system for Unity. Supports 32/64-bit dynamic data fields, enums, and rich editor integration for creating game data assets.",
   "unity": "2022.1",
   "unityRelease": "0f1",
-  "documentationUrl": "https://github.com/omidkianifarkingkode/DynamicProperties/blob/master/Assets/DynamicProperty/README.md",
+  "documentationUrl": "https://github.com/omidkianifarkingkode/DynamicProperties/blob/master/README.md",
   "license": "MIT",
   "author": {
     "name": "Omid Kianifar",

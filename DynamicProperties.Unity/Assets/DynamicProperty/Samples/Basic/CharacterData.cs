@@ -1,27 +1,21 @@
-﻿using DynamicProperty;
-using System.Collections.Generic;
-using UnityEngine;
-#if UNITY_EDITOR
-using DynamicProperty.Editor.Extensions;
-#endif
+﻿using UnityEngine;
 
-[CreateAssetMenu(fileName = "Character Data", menuName = "DynamicProperty/Create Sample Character Data")]
-public class CharacterData : ScriptableObject
+namespace DynamicProperty.Samples.Basic
 {
-    [SerializeField] protected PropertySet Properties;
-
-    [ContextMenu("DynamicProperty/Print Properties")]
-    private void PrintProperties()
+    [CreateAssetMenu(fileName = "Character Data", menuName = "DynamicProperty/Create Sample Character Data")]
+    public class CharacterData : ScriptableObject
     {
-#if UNITY_EDITOR
-        Debug.Log(Properties != null ? Properties.ToPrettyString(this) : "<null>", this);
-#else
-        Debug.Log(Properties != null ? Properties.ToString() : "<null>", this);
-#endif
+        [SerializeField] protected PropertySet Properties;
 
-        Debug.Log(Properties.PosX());
-        Debug.Log(Properties.ShadowColor());
-        Debug.Log(Properties.SpawnPosition());;
+        [ContextMenu("DynamicProperty/Print Properties")]
+        private void PrintProperties()
+        {
+            Debug.Log(Properties != null ? Properties.ToString() : "<null>", this);
+
+            Debug.Log(Properties.PosX());
+            Debug.Log(Properties.ShadowColor());
+            Debug.Log(Properties.SpawnPosition());
+        }
     }
 }
 

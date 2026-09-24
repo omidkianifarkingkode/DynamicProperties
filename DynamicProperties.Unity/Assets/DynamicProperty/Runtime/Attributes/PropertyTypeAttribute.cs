@@ -6,19 +6,23 @@ namespace DynamicProperty.DataAnnotations
     public sealed class PropertyTypeAttribute : Attribute
     {
         public Type Type { get; }
-        public object DefaultValue { get; }
 
-        // Constructor to specify only the type
+        public bool HasInitialValue { get; }
+
+        public object InitialValue { get; }
+
         public PropertyTypeAttribute(Type type)
         {
             Type = type;
+            HasInitialValue = false;
+            InitialValue = null;
         }
 
-        // Constructor to specify the type and the default value
-        public PropertyTypeAttribute(Type type, object defaultValue)
+        public PropertyTypeAttribute(Type type, object initialValue)
         {
             Type = type;
-            DefaultValue = defaultValue;
+            HasInitialValue = true;
+            InitialValue = initialValue;
         }
     }
 }

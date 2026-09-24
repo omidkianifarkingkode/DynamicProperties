@@ -127,7 +127,7 @@ namespace DynamicProperty.SourceGen
                         emittedAny = true;
 
                         // [Flags] helpers for enum-valued properties
-                        if (kind == ValueKind.Enum32 && IsFlagsEnum(declaredType))
+                        if (kind == ValueKind.Enum && IsFlagsEnum(declaredType))
                         {
                             EmitFlagChecksForProperty(sb, declaredType, idExpr, safeMemberName, seenNames);
                             emittedAny = true;
@@ -175,38 +175,22 @@ namespace DynamicProperty.SourceGen
 
         private static bool IsFlagsEnum(ITypeSymbol t)
         {
-            // Primary: explicit [Flags] attribute
-            foreach (var a in t.GetAttributes())
+            // Flags behavior is explicit. Do not infer it from numeric values.
+            foreach (var attribute in t.GetAttributes())
             {
-                var ac = a.AttributeClass;
-                if (ac == null) continue;
+                var attributeClass = attribute.AttributeClass;
+                if (attributeClass == null) continue;
 
-                var name = ac.Name; // e.g., "FlagsAttribute"
-                var fqn = ac.ToDisplayString(); // e.g., "System.FlagsAttribute" or "global::System.FlagsAttribute"
-                if (name == "FlagsAttribute") return true;
-                if (fqn == "System.FlagsAttribute") return true;
-                if (fqn == "global::System.FlagsAttribute") return true;
-                if (fqn.EndsWith(".FlagsAttribute", StringComparison.Ordinal)) return true;
-            }
-
-            // Heuristic fallback: treat as flags if multiple named values look like single-bit masks
-            int bitLike = 0, named = 0;
-            foreach (var f in t.GetMembers().OfType<IFieldSymbol>())
-            {
-                if (f.ConstantValue is null) continue;
-                named++;
-
-                // Zero doesn't count as a bit
-                if (f.ConstantValue is int iv)
+                var fqn = attributeClass.ToDisplayString();
+                if (attributeClass.Name == "FlagsAttribute" ||
+                    fqn == "System.FlagsAttribute" ||
+                    fqn == "global::System.FlagsAttribute")
                 {
-                    if (iv != 0 && (iv & (iv - 1)) == 0) bitLike++;
-                }
-                else if (f.ConstantValue is long lv)
-                {
-                    if (lv != 0 && (lv & (lv - 1)) == 0) bitLike++;
+                    return true;
                 }
             }
-            return named > 0 && bitLike >= 2;
+
+            return false;
         }
 
         private static void EmitFlagChecksForProperty(
@@ -237,9 +221,7 @@ namespace DynamicProperty.SourceGen
                 sb.Append("        public static bool ").Append(methodName)
                   .Append("(this DynamicProperty.PropertySet set)").AppendLine();
                 sb.AppendLine("        {");
-                sb.AppendLine($"            if (set.TryGetEnum32<{enumFqn}>({idExpr}, out var v))");
-                sb.AppendLine($"                return (Convert.ToInt32(v) & (int){enumFqn}.{flagName}) != 0;");
-                sb.AppendLine("            return false;");
+                sb.AppendLine($"            return set.HasEnumFlag({idExpr}, {enumFqn}.{SafeIdentifier(flagName)});");
                 sb.AppendLine("        }");
                 sb.AppendLine();
             }
@@ -463,7 +445,18 @@ namespace DynamicProperty.SourceGen
             return ns.ToDisplayString();
         }
 
-        private enum ValueKind { Int32, Single, Boolean, Int64, Double, DateTime, TimeSpan, Enum32, Unknown }
+        private enum ValueKind
+        {
+            Int32,
+            Single,
+            Boolean,
+            Int64,
+            Double,
+            DateTime,
+            TimeSpan,
+            Enum,
+            Unknown
+        }
 
         private static ValueKind Classify(ITypeSymbol t)
         {
@@ -483,7 +476,7 @@ namespace DynamicProperty.SourceGen
                 fqn == "global::UnityEngine.Vector4" ||
                 fqn == "global::UnityEngine.Color")
                 return ValueKind.Single; // components are floats
-            if (t.TypeKind == TypeKind.Enum) return ValueKind.Enum32;
+            if (t.TypeKind == TypeKind.Enum) return ValueKind.Enum;
             return ValueKind.Unknown;
         }
 
@@ -502,11 +495,11 @@ namespace DynamicProperty.SourceGen
                 case ValueKind.Boolean: sb.AppendLine($"            return set.TryGetBool({idExpr}, out var v) && v;"); break;
                 case ValueKind.Int64: sb.AppendLine($"            return set.TryGetLong({idExpr}, out var v) ? v : default;"); break;
                 case ValueKind.Double: sb.AppendLine($"            return set.TryGetDouble({idExpr}, out var v) ? v : default;"); break;
-                case ValueKind.DateTime: sb.AppendLine($"            return set.TryGetDateTime({idExpr}, out var v) ? v : default;"); break;
+                case ValueKind.DateTime: sb.AppendLine($"            return set.TryGetUtcDateTime({idExpr}, out var v) ? v : default;"); break;
                 case ValueKind.TimeSpan: sb.AppendLine($"            return set.TryGetTimeSpan({idExpr}, out var v) ? v : default;"); break;
-                case ValueKind.Enum32:
+                case ValueKind.Enum:
                     var enumTypeName = declaredType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    sb.AppendLine($"            return set.TryGetEnum32<{enumTypeName}>({idExpr}, out var v) ? v : default;");
+                    sb.AppendLine($"            return set.TryGetEnum<{enumTypeName}>({idExpr}, out var v) ? v : default;");
                     break;
             }
             sb.AppendLine("        }");
@@ -525,9 +518,9 @@ namespace DynamicProperty.SourceGen
                 case ValueKind.Double: sb.AppendLine($"            set.SetDouble({idExpr}, value);"); break;
                 case ValueKind.DateTime: sb.AppendLine($"            set.SetDateTime({idExpr}, value);"); break;
                 case ValueKind.TimeSpan: sb.AppendLine($"            set.SetTimeSpan({idExpr}, value);"); break;
-                case ValueKind.Enum32:
+                case ValueKind.Enum:
                     var enumTypeName = declaredType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    sb.AppendLine($"            set.SetEnum32<{enumTypeName}>({idExpr}, value);");
+                    sb.AppendLine($"            set.SetEnum<{enumTypeName}>({idExpr}, value);");
                     break;
             }
             sb.AppendLine("        }");
@@ -552,7 +545,7 @@ namespace DynamicProperty.SourceGen
                 ValueKind.Double => "double",
                 ValueKind.DateTime => "global::System.DateTime",
                 ValueKind.TimeSpan => "global::System.TimeSpan",
-                ValueKind.Enum32 => declaredType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                ValueKind.Enum => declaredType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 _ => "object"
             };
 

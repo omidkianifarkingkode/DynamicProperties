@@ -90,9 +90,10 @@ namespace DynamicProperty.Editor
                     meta.GroupKind = PropertyGroupKind.Color;
                 }
 
-                if (propertyTypeAttr.DefaultValue != null)
+                if (propertyTypeAttr.HasInitialValue)
                 {
-                    meta.DefaultValue = propertyTypeAttr.DefaultValue;
+                    meta.HasInitialValue = true;
+                    meta.InitialValue = propertyTypeAttr.InitialValue;
                 }
             }
 

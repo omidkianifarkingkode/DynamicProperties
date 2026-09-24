@@ -59,37 +59,80 @@ namespace DynamicProperty.Editor
 
         public static bool DrawBool(Rect r, bool v) => EditorGUI.Toggle(r, v);
 
-        public static int DrawEnum(Rect r, int raw, Type enumType)
+        public static int DrawEnum32(Rect rect, int raw, Type enumType)
+        {
+            ulong bits = unchecked((uint)raw);
+
+            bits = DrawEnumBits(rect, bits, enumType);
+
+            return unchecked((int)(uint)bits);
+        }
+
+        public static long DrawEnum64(Rect rect, long raw, Type enumType)
+        {
+            ulong bits = unchecked((ulong)raw);
+
+            bits = DrawEnumBits(rect, bits, enumType);
+
+            return unchecked((long)bits);
+        }
+
+        private static ulong DrawEnumBits(Rect rect, ulong rawBits, Type enumType)
         {
             if (enumType == null)
             {
-                EditorGUI.HelpBox(r, "Enum type not defined!", MessageType.Warning);
-                return raw;
+                EditorGUI.HelpBox(rect, "Enum type not defined!", MessageType.Warning);
+
+                return rawBits;
             }
 
+            ulong widthMask = EnumBitUtility.GetStorageMask(enumType);
+
+            rawBits &= widthMask;
+
+            var current = EnumBitUtility.FromUInt64Bits(enumType, rawBits);
+
             bool isFlags = enumType.IsDefined(typeof(FlagsAttribute), false);
+
+            EditorGUI.BeginChangeCheck();
+
+            Enum next = isFlags
+                ? EditorGUI.EnumFlagsField(rect, current)
+                : EditorGUI.EnumPopup(rect, current);
+
+            if (!EditorGUI.EndChangeCheck())
+                return rawBits;
+
+            ulong nextBits = EnumBitUtility.ToUInt64Bits(enumType, next);
+
             if (isFlags)
             {
-                int mask = EditorGUI.MaskField(r, raw, Enum.GetNames(enumType));
-                // clamp to defined bits
-                int all = 0;
-                foreach (var v in Enum.GetValues(enumType))
-                    all |= Convert.ToInt32(v);
-                return mask & all;
+                ulong definedMask = EnumBitUtility.GetDefinedBitsMask(enumType);
+
+                // Preserve unknown bits.
+                ulong unknownBits =
+                    rawBits &
+                    ~definedMask &
+                    widthMask;
+
+                nextBits =
+                    (nextBits & definedMask) |
+                    unknownBits;
             }
-            else
-            {
-                var names = Enum.GetNames(enumType);
-                Array values = Enum.GetValues(enumType);
-                int[] iv = new int[values.Length];
-                for (int i = 0; i < iv.Length; i++) iv[i] = Convert.ToInt32(values.GetValue(i));
-                return EditorGUI.IntPopup(r, raw, names, iv);
-            }
+
+            return nextBits & widthMask;
         }
 
         // DateTime as ticks in long, UI "yyyy-MM-dd HH:mm:ss" + [-][+][Now]
-        public static long DrawDateTimeTicks(Rect r, long ticks, float stepSeconds)
+        public static long DrawUtcDateTimeTicks(Rect r, long ticks, float stepSeconds)
         {
+            if (ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks)
+            {
+                EditorGUI.HelpBox(r, $"Invalid UTC DateTime ticks: {ticks}", MessageType.Error);
+
+                return ticks;
+            }
+
             DateTime dt;
             try { dt = new DateTime(ticks, DateTimeKind.Utc); }
             catch { dt = DateTime.UnixEpoch; }

@@ -63,7 +63,7 @@ namespace DynamicProperty.Editor.Extensions
                 PropertyValueType.Int => $"{label}: {u.asInt} (raw {p.RawValue})",
                 PropertyValueType.Bool => $"{label}: {u.asBool} (raw {p.RawValue})",
                 PropertyValueType.Enum => meta?.EnumType != null
-                    ? $"{label}: {Enum.ToObject(meta.EnumType, u.asInt)} (raw {p.RawValue})"
+                    ? $"{label}: {EnumBitUtility.FromRaw32(meta.EnumType, p.RawValue)} (raw {p.RawValue})"
                     : $"{label}: <enum?> (raw {p.RawValue})",
                 _ => $"{label}: <unknown 32 type {type}> (raw {p.RawValue})"
             };
@@ -82,7 +82,7 @@ namespace DynamicProperty.Editor.Extensions
                 PropertyValueType.Float => $"{label}: {u.asFloat} (raw {u.raw})",
                 PropertyValueType.Bool => $"{label}: {u.asBool} (raw {u.raw})",
                 PropertyValueType.Enum => meta?.EnumType != null
-                    ? $"{label}: {Enum.ToObject(meta.EnumType, u.asInt)} (raw {u.raw})"
+                    ? $"{label}: {EnumBitUtility.FromRaw64(meta.EnumType, p.RawValue)} (raw {u.raw})"
                     : $"{label}: <enum?> (raw {u.raw})",
                 PropertyValueType.DateTime => $"{label}: {new DateTime(u.raw, DateTimeKind.Utc):yyyy-MM-dd HH:mm:ss} UTC (ticks {u.raw})",
                 PropertyValueType.TimeSpan => $"{label}: {new TimeSpan(u.raw)} (ticks {u.raw})",

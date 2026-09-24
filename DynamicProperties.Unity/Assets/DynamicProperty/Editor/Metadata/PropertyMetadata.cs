@@ -13,7 +13,8 @@ namespace DynamicProperty.Editor
         public float? Step;
         public Type EnumType;
         public string GroupName;
-        public object DefaultValue;
+        public bool HasInitialValue;
+        public object InitialValue;
         public bool HiddenInEditor;
         public PropertyGroupKind GroupKind;
     }

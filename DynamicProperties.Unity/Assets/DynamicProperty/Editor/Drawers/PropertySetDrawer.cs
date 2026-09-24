@@ -24,18 +24,27 @@ namespace DynamicProperty.Editor
             public float Height;
         }
 
-        // ---------- Routing by type (no bitness) ----------
-        private static bool Is32Type(PropertyValueType t) =>
-            t == PropertyValueType.Int
-         || t == PropertyValueType.Float
-         || t == PropertyValueType.Bool
-         || t == PropertyValueType.Enum;
+        // ---------- Routing by metadata ----------
+        private static bool Is64Type(PropertyMetadata meta)
+        {
+            if (meta == null)
+                return false;
 
-        private static bool Is64Type(PropertyValueType t) =>
-            t == PropertyValueType.Long
-         || t == PropertyValueType.Double
-         || t == PropertyValueType.DateTime
-         || t == PropertyValueType.TimeSpan;
+            switch (meta.Type)
+            {
+                case PropertyValueType.Long:
+                case PropertyValueType.Double:
+                case PropertyValueType.DateTime:
+                case PropertyValueType.TimeSpan:
+                    return true;
+
+                case PropertyValueType.Enum:
+                    return meta.EnumType != null && EnumBitUtility.Uses64BitStorage(meta.EnumType);
+
+                default:
+                    return false;
+            }
+        }
 
         // ---------- Height ----------
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
@@ -82,7 +91,6 @@ namespace DynamicProperty.Editor
             if (GUI.Button(addRect, "+ Add", EditorStyles.miniButton))
             {
                 ShowAddMenuUnified(items32, items64, resolver);
-                SetDefaultValueForNewProperty(items32, resolver);
             }
             y += titleRect.height + 4f;
 
@@ -237,7 +245,7 @@ namespace DynamicProperty.Editor
             var values = resolver.GetAllValues();
 
             var groups32 = new Dictionary<string, (PropertyGroupKind kind, List<(int id, string disp)>)>(StringComparer.OrdinalIgnoreCase);
-            var singles = new List<(int id, string disp, PropertyValueType type)>();
+            var singles = new List<(int id, string disp, PropertyMetadata meta)>();
 
             for (int i = 0; i < values.Length; i++)
             {
@@ -261,7 +269,7 @@ namespace DynamicProperty.Editor
                 }
                 else
                 {
-                    singles.Add((id, disp, meta.Type));
+                    singles.Add((id, disp, meta));
                 }
             }
 
@@ -275,11 +283,17 @@ namespace DynamicProperty.Editor
                 if (kind == PropertyGroupKind.Color) label += "  (Color)";
                 else if (kind == PropertyGroupKind.Vector2) label += "  (Vector2)";
                 else if (kind == PropertyGroupKind.Vector3) label += "  (Vector3)";
+                else if (kind == PropertyGroupKind.Vector4) label += "  (Vector4)";
 
                 var items = kvp.Value.Item2;
                 menu.AddItem(new GUIContent(label), false, () =>
                 {
-                    foreach (var (id, _) in items) Add32(items32, id, 0);
+                    foreach (var (id, _) in items)
+                    {
+                        var meta = resolver.Get(id);
+
+                        Add32(items32, id, GetInitialRaw32(meta));
+                    }
                     items32.serializedObject.ApplyModifiedProperties();
                 });
             }
@@ -289,12 +303,17 @@ namespace DynamicProperty.Editor
             // Singles: route by type
             foreach (var entry in singles.OrderBy(s => s.disp, StringComparer.OrdinalIgnoreCase))
             {
-                bool is64 = Is64Type(entry.type);
+                bool is64 = Is64Type(entry.meta);
                 var content = new GUIContent(entry.disp + (is64 ? "  (64)" : "  (32)"));
                 menu.AddItem(content, false, () =>
                 {
-                    if (is64) Add64(items64, entry.id, 0L);
-                    else Add32(items32, entry.id, 0);
+                    var meta = resolver.Get(entry.id);
+
+                    if (is64)
+                        Add64(items64, entry.id, GetInitialRaw64(meta));
+                    else
+                        Add32(items32, entry.id, GetInitialRaw32(meta));
+
                     items32.serializedObject.ApplyModifiedProperties();
                 });
             }
@@ -442,8 +461,22 @@ namespace DynamicProperty.Editor
                     }
                 case PropertyValueType.Enum:
                     {
-                        int v = PropertyDrawerUtil.DrawEnum(valRect, rawProp.intValue, meta.EnumType);
-                        rawProp.intValue = v;
+                        if (meta.EnumType == null)
+                        {
+                            EditorGUI.HelpBox(valRect, "Enum type not defined!", MessageType.Warning);
+
+                            break;
+                        }
+
+                        if (EnumBitUtility.Uses64BitStorage(meta.EnumType))
+                        {
+                            EditorGUI.HelpBox(valRect, "Enum requires 64-bit storage.", MessageType.Error);
+
+                            break;
+                        }
+
+                        rawProp.intValue = PropertyDrawerUtil.DrawEnum32(valRect, rawProp.intValue, meta.EnumType);
+
                         break;
                     }
                 default:
@@ -565,27 +598,22 @@ namespace DynamicProperty.Editor
                     }
                 case PropertyValueType.Enum:
                     {
-                        int enumVal = u.asInt;
-                        var enumType = meta.EnumType;
-                        if (enumType == null) { EditorGUI.HelpBox(valRect, "Enum type not defined!", MessageType.Warning); break; }
+                        if (meta.EnumType == null)
+                        {
+                            EditorGUI.HelpBox(valRect, "Enum type not defined!", MessageType.Warning);
 
-                        bool isFlags = enumType.IsDefined(typeof(FlagsAttribute), false);
-                        if (isFlags)
-                        {
-                            enumVal = EditorGUI.MaskField(valRect, enumVal, Enum.GetNames(enumType));
-                            int all = 0; foreach (var v in Enum.GetValues(enumType)) all |= Convert.ToInt32(v);
-                            enumVal &= all;
+                            break;
                         }
-                        else
+
+                        if (!EnumBitUtility.Uses64BitStorage(meta.EnumType))
                         {
-                            var names = Enum.GetNames(enumType);
-                            var values = (Array)Enum.GetValues(enumType);
-                            int[] ints = new int[values.Length];
-                            for (int i = 0; i < values.Length; i++) ints[i] = Convert.ToInt32(values.GetValue(i));
-                            enumVal = EditorGUI.IntPopup(valRect, enumVal, names, ints);
+                            EditorGUI.HelpBox(valRect, "Enum requires 32-bit storage.", MessageType.Error);
+
+                            break;
                         }
-                        u.asInt = enumVal;
-                        rawProp.longValue = u.raw;
+
+                        rawProp.longValue = PropertyDrawerUtil.DrawEnum64(valRect, rawProp.longValue, meta.EnumType);
+
                         break;
                     }
                 default:
@@ -595,6 +623,14 @@ namespace DynamicProperty.Editor
         }
 
         // ---------- Helpers ----------
+
+        private static void MarkStructureChanged(SerializedProperty propertySet)
+        {
+            var version = propertySet.FindPropertyRelative("_structureVersion");
+
+            version.intValue++;
+        }
+
         private static (SerializedProperty items32, SerializedProperty items64) GetLists(SerializedProperty property)
             => (property.FindPropertyRelative("_items32"), property.FindPropertyRelative("_items64"));
 
@@ -702,54 +738,58 @@ namespace DynamicProperty.Editor
             e.FindPropertyRelative("rawValue").intValue = u.raw;
         }
 
-        private void SetDefaultValueForNewProperty(SerializedProperty items32, IPropertyMetadataResolver resolver)
+
+        private static int GetInitialRaw32(PropertyMetadata meta)
         {
-            // Iterate through all items (32-bit properties)
-            for (int i = 0; i < items32.arraySize; i++)
+            if (meta == null || !meta.HasInitialValue)
+                return 0;
+
+            switch (meta.Type)
             {
-                var item = items32.GetArrayElementAtIndex(i);
-                int id = item.FindPropertyRelative("id").intValue;
+                case PropertyValueType.Int:
+                    return (int)meta.InitialValue;
 
-                // Fetch the metadata for this property
-                var meta = resolver.Get(id);
-                if (meta != null && meta.DefaultValue != null)
-                {
-                    var rawValueProperty = item.FindPropertyRelative("rawValue");
+                case PropertyValueType.Bool:
+                    return (bool)meta.InitialValue ? 1 : 0;
 
-                    // Check if the property has a default value and handle by type
-                    switch (meta.Type)
+                case PropertyValueType.Float:
+                    return new ValueUnion32
                     {
-                        case PropertyValueType.Bool:
-                            rawValueProperty.intValue = (bool)meta.DefaultValue ? 1 : 0;
-                            break;
-                        case PropertyValueType.Int:
-                            rawValueProperty.intValue = (int)meta.DefaultValue;
-                            break;
-                        case PropertyValueType.Double:
-                            rawValueProperty.doubleValue = (double)meta.DefaultValue;
-                            break;
-                        case PropertyValueType.Long:
-                            rawValueProperty.longValue = (long)meta.DefaultValue;
-                            break;
-                        case PropertyValueType.Enum:
-                            var enumValue = (Enum)meta.DefaultValue;
-                            rawValueProperty.intValue = Convert.ToInt32(enumValue);
-                            break;
-                        case PropertyValueType.Float:
-                            rawValueProperty.floatValue = (float)meta.DefaultValue;
-                            break;
+                        asFloat = (float)meta.InitialValue
+                    }.raw;
 
-                        // Handle other types (e.g., Vectors, Color, DateTime, TimeSpan)
-                        default:
-                            Debug.LogWarning($"Unhandled PropertyValueType: {meta.Type}");
-                            break;
-                    }
-                }
+                case PropertyValueType.Enum:
+                    return EnumBitUtility.ToRaw32(meta.EnumType, (Enum)meta.InitialValue);
+
+                default:
+                    return 0;
             }
-
-            items32.serializedObject.ApplyModifiedProperties();
         }
 
+        private static long GetInitialRaw64(PropertyMetadata meta)
+        {
+            if (meta == null || !meta.HasInitialValue)
+                return 0L;
 
+            switch (meta.Type)
+            {
+                case PropertyValueType.Long:
+                    return (long)meta.InitialValue;
+
+                case PropertyValueType.Double:
+                    return new ValueUnion64
+                    {
+                        asDouble = (double)meta.InitialValue
+                    }.raw;
+
+                case PropertyValueType.Enum:
+                    return EnumBitUtility.ToRaw64(
+                        meta.EnumType,
+                        (Enum)meta.InitialValue);
+
+                default:
+                    return 0L;
+            }
+        }
     }
 }

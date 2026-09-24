@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e4aa5080b38931b4cbfdca3b522afd01, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enumTypeName: CharacterProperties, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
-    PublicKeyToken=null
+  enumTypeName: DynamicProperty.Samples.Basic.CharacterProperties, DynamicProperty.Samples.Basic,
+    Version=0.0.0.0, Culture=neutral, PublicKeyToken=null

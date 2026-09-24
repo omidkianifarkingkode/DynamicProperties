@@ -1,3 +1,14 @@
 {
-	"name": "DynamicProperty.Runtime"
+    "name": "DynamicProperty.Runtime",
+    "rootNamespace": "DynamicProperty",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }

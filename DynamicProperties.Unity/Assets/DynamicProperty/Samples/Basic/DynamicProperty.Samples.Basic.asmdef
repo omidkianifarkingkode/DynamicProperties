@@ -1,12 +1,10 @@
 {
-    "name": "DynamicProperty.Editor",
-    "rootNamespace": "DynamicProperty.Editor",
+    "name": "DynamicProperty.Samples.Basic",
+    "rootNamespace": "DynamicProperty.Samples.Basic",
     "references": [
         "DynamicProperty.Runtime"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,

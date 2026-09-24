@@ -31,13 +31,15 @@ MonoBehaviour:
     - id: 3
       rawValue: 2
     - id: 6
-      rawValue: 1070889697
+      rawValue: 0
     - id: 7
       rawValue: 0
     - id: 8
       rawValue: 0
+    - id: 16
+      rawValue: 2
     _items64:
     - id: 4
       rawValue: 638713695000000000
     - id: 5
-      rawValue: 4200000000
+      rawValue: 4800000000

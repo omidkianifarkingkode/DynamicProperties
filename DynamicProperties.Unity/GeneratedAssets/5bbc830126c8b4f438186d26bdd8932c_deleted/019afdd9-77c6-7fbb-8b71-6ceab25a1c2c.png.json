@@ -1,0 +1,20 @@
+{
+    "asset": "5bbc830126c8b4f438186d26bdd8932c",
+    "fileName": "019afdd9-77c6-7fbb-8b71-6ceab25a1c2c.png",
+    "prompt": "soldier movement topdown sprite sheet",
+    "negativePrompt": "",
+    "model": "5b5b2af1-6ea4-4266-b087-cc9f3bf4f450",
+    "modelName": "Flux.1 Dev",
+    "customSeed": -1,
+    "w3CTraceId": "6c94a1e5a67fdffca76c9080ad795b55",
+    "refinementMode": "Generation",
+    "pixelateTargetSize": 0,
+    "pixelateKeepImageSize": false,
+    "pixelatePixelBlockSize": 0,
+    "pixelateMode": 0,
+    "pixelateOutlineThickness": 0,
+    "doodles": {
+        "m_Items": []
+    },
+    "upscaleFactor": 0
+}

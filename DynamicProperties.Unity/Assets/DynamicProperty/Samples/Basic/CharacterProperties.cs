@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace DynamicProperty.Samples.Basic
 {
+
     public enum CharacterProperties
     {
         [PropertyEditorIgnore]

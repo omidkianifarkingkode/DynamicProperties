@@ -13,6 +13,25 @@ namespace DynamicProperty.Editor
 
         public ReflectionMetadataResolver(Type enumType)
         {
+            if (enumType == null)
+            {
+                throw new ArgumentNullException(nameof(enumType));
+            }
+
+            if (!enumType.IsEnum)
+            {
+                throw new ArgumentException(
+                    "Property schema type must be an enum.",
+                    nameof(enumType));
+            }
+
+            if (Enum.GetUnderlyingType(enumType) != typeof(int))
+            {
+                throw new ArgumentException(
+                    "Property schema enum must use int as its underlying type.",
+                    nameof(enumType));
+            }
+
             _enumType = enumType;
         }
 
@@ -20,7 +39,6 @@ namespace DynamicProperty.Editor
 
         public PropertyMetadata Get(int id)
         {
-            if (_enumType == null) return null;
             if (_cache.TryGetValue(id, out var m)) return m;
 
             string name = Enum.GetName(_enumType, id);
@@ -117,7 +135,7 @@ namespace DynamicProperty.Editor
             return meta;
         }
 
-        public string[] GetAllNames() => _enumType == null ? Array.Empty<string>() : Enum.GetNames(_enumType);
+        public string[] GetAllNames() => Enum.GetNames(_enumType);
 
         public int[] GetAllValues()
         {

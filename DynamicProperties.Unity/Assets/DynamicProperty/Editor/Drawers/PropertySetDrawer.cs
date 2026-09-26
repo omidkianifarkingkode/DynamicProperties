@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using System.Reflection;
+using DynamicProperty.DataAnnotations;
 
 namespace DynamicProperty.Editor
 {
@@ -49,36 +51,54 @@ namespace DynamicProperty.Editor
         // ---------- Height ----------
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            PropertyMetadataRegistry.EnsureBound();
-            var resolver = PropertyMetadataRegistry.Resolver;
-            if (resolver == null) return EditorGUIUtility.singleLineHeight * 2f;
+            if (!TryResolveMetadata(out var resolver, out _))
+            {
+                return EditorGUIUtility.singleLineHeight * 2f + 8f;
+            }
 
             var (items32, items64) = GetLists(property);
-            if (items32 == null || items64 == null) return EditorGUIUtility.singleLineHeight * 2f;
+
+            if (items32 == null || items64 == null)
+            {
+                return EditorGUIUtility.singleLineHeight * 2f + 8f;
+            }
 
             BuildRowsUnified(property, resolver, out var rows, out bool hasAnyDup);
 
-            float h = EditorGUIUtility.singleLineHeight + 4f; // title
-            if (hasAnyDup) h += EditorGUIUtility.singleLineHeight * 1.5f + 4f;
-            foreach (var r in rows) h += r.Height + 2f;
-            return h + 6f;
+            float height = EditorGUIUtility.singleLineHeight + 4f;
+
+            if (hasAnyDup)
+            {
+                height += EditorGUIUtility.singleLineHeight * 1.5f + 4f;
+            }
+
+            foreach (var row in rows)
+            {
+                height += row.Height + 2f;
+            }
+
+            return height + 6f;
         }
 
         // ---------- GUI ----------
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            PropertyMetadataRegistry.EnsureBound();
-            var resolver = PropertyMetadataRegistry.Resolver;
-            if (resolver == null)
+            if (!TryResolveMetadata(out var resolver, out var error))
             {
-                EditorGUI.HelpBox(position, "Bind your PropertyId enum in Project Settings → Dynamic Properties.", MessageType.Warning);
+                EditorGUI.HelpBox(position, error, MessageType.Error);
+
                 return;
             }
 
             var (items32, items64) = GetLists(property);
+
             if (items32 == null || items64 == null)
             {
-                EditorGUI.HelpBox(position, "PropertySet: internal lists not found.", MessageType.Error);
+                EditorGUI.HelpBox(
+                    position,
+                    "PropertySet internal lists were not found.",
+                    MessageType.Error);
+
                 return;
             }
 
@@ -629,6 +649,30 @@ namespace DynamicProperty.Editor
             var version = propertySet.FindPropertyRelative("_structureVersion");
 
             version.intValue++;
+        }
+
+        private bool TryResolveMetadata(out IPropertyMetadataResolver resolver, out string error)
+        {
+            resolver = null;
+            error = null;
+
+            if (fieldInfo == null)
+            {
+                error = "Unable to resolve PropertySet field information.";
+
+                return false;
+            }
+
+            var schema = fieldInfo.GetCustomAttribute<PropertySchemaAttribute>(true);
+
+            if (schema == null)
+            {
+                error = "PropertySet requires [PropertySchema(typeof(...))].";
+
+                return false;
+            }
+
+            return PropertyMetadataRegistry.TryGetResolver(schema.SchemaType, out resolver, out error);
         }
 
         private static (SerializedProperty items32, SerializedProperty items64) GetLists(SerializedProperty property)

@@ -1,21 +1,54 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace DynamicProperty.Editor
 {
     public static class PropertyMetadataRegistry
     {
-        public static IPropertyMetadataResolver Resolver { get; private set; }
+        private static readonly Dictionary<Type, IPropertyMetadataResolver> Resolvers = new();
 
-        public static void Bind(Type enumType)
+        public static bool TryGetResolver(Type schemaType, out IPropertyMetadataResolver resolver, out string error)
         {
-            Resolver = enumType != null ? new ReflectionMetadataResolver(enumType) : null;
+            resolver = null;
+            error = null;
+
+            if (schemaType == null)
+            {
+                error = "Property schema type is null.";
+                return false;
+            }
+
+            if (!schemaType.IsEnum)
+            {
+                error = $"Property schema '{schemaType.FullName}' must be an enum.";
+
+                return false;
+            }
+
+            var underlyingType = Enum.GetUnderlyingType(schemaType);
+
+            if (underlyingType != typeof(int))
+            {
+                error = $"Property schema '{schemaType.FullName}' must use int as its underlying type.";
+
+                return false;
+            }
+
+            if (Resolvers.TryGetValue(schemaType, out resolver))
+            {
+                return true;
+            }
+
+            resolver = new ReflectionMetadataResolver(schemaType);
+
+            Resolvers.Add(schemaType, resolver);
+
+            return true;
         }
 
-        /// Call this before using Resolver if you're unsure it's bound.
-        public static void EnsureBound()
+        internal static void Clear()
         {
-            if (Resolver != null) return;
-            Bind(DynamicPropertiesSettings.instance.EnumType);
+            Resolvers.Clear();
         }
     }
 }

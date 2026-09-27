@@ -14,9 +14,12 @@ namespace DynamicProperty.Samples.Basic
         {
             Debug.Log(Properties != null ? Properties.ToString() : "<null>", this);
 
-           // Debug.Log(Properties.PosX());
-            //Debug.Log(Properties.ShadowColor());
-            //Debug.Log(Properties.SpawnPosition());
+            Debug.Log(Properties.Health(), this);
+            Debug.Log(Properties.IsBoss(), this);
+            Debug.Log(Properties.Weapon(), this);
+
+            Debug.Log(Properties.PosX(), this);
+            Debug.Log(Properties.ColorR(), this);
         }
     }
 }

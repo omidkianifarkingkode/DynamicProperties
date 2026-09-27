@@ -1,5 +1,7 @@
 fileFormatVersion: 2
 guid: 97b6470dc710a2648a2cdf77429ada06
+labels:
+- RoslynAnalyzer
 PluginImporter:
   externalObjects: {}
   serializedVersion: 3
@@ -14,6 +16,7 @@ PluginImporter:
     Android:
       enabled: 0
       settings:
+        AndroidLibraryDependee: UnityLibrary
         AndroidSharedLibraryType: Executable
         CPU: ARMv7
     Any:

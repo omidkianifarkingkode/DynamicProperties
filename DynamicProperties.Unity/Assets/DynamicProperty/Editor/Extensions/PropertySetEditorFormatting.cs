@@ -10,7 +10,7 @@ namespace DynamicProperty.Editor.Extensions
         /// The schema must be explicitly provided because PropertySet itself
         /// is intentionally schema-agnostic.
         /// </summary>
-        public static string ToPrettyString(this DynamicProperty.PropertySet set, Type schemaType, UnityEngine.Object context = null)
+        public static string ToPrettyString(this PropertySet set, Type schemaType, UnityEngine.Object context = null)
         {
             var sb = new StringBuilder();
 

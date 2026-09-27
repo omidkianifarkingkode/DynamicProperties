@@ -7,5 +7,4 @@ namespace DynamicProperty.DataAnnotations
     {
         public ColorGroupAttribute(string name) : base(name) { }
     }
-
 }

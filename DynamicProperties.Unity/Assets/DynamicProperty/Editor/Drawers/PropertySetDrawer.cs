@@ -1,11 +1,11 @@
 ﻿
+using DynamicProperty.DataAnnotations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-using System.Reflection;
-using DynamicProperty.DataAnnotations;
 
 namespace DynamicProperty.Editor
 {
@@ -14,16 +14,45 @@ namespace DynamicProperty.Editor
     {
         private enum Backing { Bit32, Bit64 }
 
+        private enum RowState { Normal, Unknown, WrongStorage, InvalidGroup, PartialGroup }
+
         private struct Row
         {
             public Backing Bin;            // which internal list this row belongs to
             public bool IsGroup;           // grouped 32-bit float row (Vector/Color)
             public PropertyGroupKind Kind; // None / Vector2 / Vector3 / Color
             public string Label;           // group label or single display name
-            public string GroupKey;        // non-null for groups
             public List<int> Indices;      // indices into the corresponding list (_items32/_items64)
             public bool IsDuplicate;       // highlight duplicate
+            public RowState State;
+            
+            public string Category;
+            public int? Order;
+            public int SchemaOrder;
+
             public float Height;
+        }
+
+        private struct ValidationSummary
+        {
+            public bool HasDuplicates;
+            public bool HasUnknownProperties;
+            public bool HasWrongStorage;
+            public bool HasInvalidGroups;
+            public bool HasPartialGroups;
+
+            public bool HasErrors =>
+                HasDuplicates ||
+                HasWrongStorage ||
+                HasInvalidGroups ||
+                HasPartialGroups;
+
+            public bool HasWarnings =>
+                HasUnknownProperties;
+
+            public bool HasAny =>
+                HasErrors ||
+                HasWarnings;
         }
 
         // ---------- Routing by metadata ----------
@@ -63,17 +92,24 @@ namespace DynamicProperty.Editor
                 return EditorGUIUtility.singleLineHeight * 2f + 8f;
             }
 
-            BuildRowsUnified(property, resolver, out var rows, out bool hasAnyDup);
+            BuildRowsUnified(property, resolver, out var rows, out var validation);
 
             float height = EditorGUIUtility.singleLineHeight + 4f;
 
-            if (hasAnyDup)
-            {
-                height += EditorGUIUtility.singleLineHeight * 1.5f + 4f;
-            }
+            if (validation.HasAny)
+                height += EditorGUIUtility.singleLineHeight * 2f + 4f;
+
+            string currentCategory = null;
 
             foreach (var row in rows)
             {
+                if (!string.Equals(currentCategory, row.Category, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentCategory = row.Category;
+
+                    height += GetCategoryHeaderHeight();
+                }
+
                 height += row.Height + 2f;
             }
 
@@ -110,51 +146,132 @@ namespace DynamicProperty.Editor
             EditorGUI.LabelField(titleRect, ObjectNames.NicifyVariableName(property.displayName), EditorStyles.boldLabel);
             if (GUI.Button(addRect, "+ Add", EditorStyles.miniButton))
             {
-                ShowAddMenuUnified(items32, items64, resolver);
+                ShowAddPicker(addRect, property, items32, items64, resolver);
             }
             y += titleRect.height + 4f;
 
             // Rows
-            BuildRowsUnified(property, resolver, out var rows, out bool hasAnyDup);
-            if (hasAnyDup)
+            BuildRowsUnified(property, resolver, out var rows, out var validation);
+
+            if (validation.HasAny)
             {
-                var warn = new Rect(position.x, y, position.width, EditorGUIUtility.singleLineHeight * 1.5f);
-                EditorGUI.HelpBox(warn, "Duplicate properties detected. Remove extras to avoid undefined behavior.", MessageType.Warning);
-                y += warn.height + 4f;
+                var validationRect = new Rect(position.x, y, position.width, EditorGUIUtility.singleLineHeight * 2f);
+
+                EditorGUI.HelpBox(
+                    validationRect,
+                    GetValidationSummaryMessage(validation),
+                    validation.HasErrors
+                        ? MessageType.Error
+                        : MessageType.Warning);
+
+                y += validationRect.height + 4f;
             }
+
+            string currentCategory = null;
 
             foreach (var row in rows)
             {
+                if (!string.Equals(currentCategory, row.Category, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentCategory = row.Category;
+
+                    y += DrawCategoryHeader(position, y, currentCategory);
+                }
+
                 var r = new Rect(position.x, y, position.width, row.Height);
 
-                if (row.IsDuplicate)
-                    EditorGUI.DrawRect(new Rect(r.x, r.y + 1f, r.width, r.height - 2f), new Color(1f, 0.85f, 0.85f, 0.35f));
+                if (row.IsDuplicate ||
+                    row.State == RowState.WrongStorage ||
+                    row.State == RowState.InvalidGroup ||
+                    row.State == RowState.PartialGroup)
+                {
+                    EditorGUI.DrawRect(
+                        new Rect(r.x, r.y + 1f, r.width, r.height - 2f),
+                        new Color(1f, 0.3f, 0.3f, 0.18f));
+                }
+                else if (row.State == RowState.Unknown)
+                {
+                    EditorGUI.DrawRect(
+                        new Rect(r.x, r.y + 1f, r.width, r.height - 2f),
+                        new Color(1f, 0.75f, 0.15f, 0.22f));
+                }
 
-                if (row.IsGroup) DrawGroupRow32(r, row, items32, resolver);
+                bool structureChanged;
+
+                if (row.IsGroup)
+                {
+                    structureChanged = DrawGroupRow32(r, property, row, items32, resolver);
+                }
+                else if (row.Bin == Backing.Bit32)
+                {
+                    structureChanged = DrawSingleRow32(r, property, items32, row.Indices[0], resolver);
+                }
                 else
                 {
-                    if (row.Bin == Backing.Bit32) DrawSingleRow32(r, items32, row.Indices[0], resolver);
-                    else DrawSingleRow64(r, items64, row.Indices[0], resolver);
+                    structureChanged = DrawSingleRow64(r, property, items64, row.Indices[0], resolver);
                 }
+
+                if (structureChanged)
+                    return;
 
                 y += row.Height + 2f;
             }
         }
 
         // ---------- Build unified rows (group 32-bit float groups; singles: 32 then 64) ----------
-        private void BuildRowsUnified(SerializedProperty property, IPropertyMetadataResolver resolver,
-                                      out List<Row> rows, out bool hasAnyDup)
+        private void BuildRowsUnified(
+            SerializedProperty property,
+            IPropertyMetadataResolver resolver,
+            out List<Row> rows,
+            out ValidationSummary validation)
         {
             var (items32, items64) = GetLists(property);
             rows = new List<Row>();
-            hasAnyDup = false;
+            validation = new ValidationSummary();
+
+            var schemaValues = resolver.GetAllValues();
+            var schemaOrder = new Dictionary<int, int>();
+            for (int i = 0; i < schemaValues.Length; i++)
+                schemaOrder[schemaValues[i]] = i;
+
+            var groupDefinitions = PropertyGroupValidator.Build(resolver);
+
+            validation.HasInvalidGroups = groupDefinitions.Values.Any(definition => !definition.IsValid);
 
             bool dup32 = HasDuplicates(items32, out var map32);
             bool dup64 = HasDuplicates(items64, out var map64);
             var ids32 = CollectIds(items32);
             var ids64 = CollectIds(items64);
             bool cross = ids32.Overlaps(ids64);
-            hasAnyDup = dup32 || dup64 || cross;
+            validation.HasDuplicates = dup32 || dup64 || cross;
+
+            var partialGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var definition in groupDefinitions.Values)
+            {
+                if (!definition.IsValid)
+                    continue;
+
+                int presentCount = definition.MemberIds.Count(id => ids32.Contains(id) || ids64.Contains(id));
+
+                if (presentCount == 0)
+                {
+                    // Entire group is absent.
+                    // This is a valid sparse state.
+                    continue;
+                }
+
+                if (presentCount == definition.MemberIds.Count)
+                {
+                    // All logical members exist somewhere.
+                    // Wrong-storage validation is handled separately.
+                    continue;
+                }
+
+                partialGroupNames.Add(definition.Name);
+
+                validation.HasPartialGroups = true;
+            }
 
             var consumed32 = new HashSet<int>();
             var groupBuckets = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
@@ -163,35 +280,78 @@ namespace DynamicProperty.Editor
             for (int i = 0; i < items32.arraySize; i++)
             {
                 int id = items32.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
-                var meta = resolver.Get(id);
-                if (meta == null) continue;
 
-                if (meta.Type == PropertyValueType.Float && !string.IsNullOrEmpty(meta.GroupName))
+                var meta = resolver.Get(id);
+
+                if (meta == null || string.IsNullOrWhiteSpace(meta.GroupName))
+                    continue;
+
+                string groupName = meta.GroupName.Trim();
+
+                if (!groupDefinitions.TryGetValue(groupName, out var definition))
+                    continue;
+
+                // Invalid schema groups must not be interpreted
+                // as aggregates.
+                if (!definition.IsValid)
+                    continue;
+
+                if (!groupBuckets.TryGetValue(groupName, out var list))
                 {
-                    if (!groupBuckets.TryGetValue(meta.GroupName, out var list))
-                    {
-                        list = new List<int>();
-                        groupBuckets[meta.GroupName] = list;
-                    }
-                    list.Add(i);
+                    list = new List<int>();
+                    groupBuckets[groupName] = list;
                 }
+
+                list.Add(i);
             }
 
             // Group rows
             foreach (var kvp in groupBuckets)
             {
                 var indices = kvp.Value;
-                if (indices.Count < 2) continue;
 
-                var firstMeta = resolver.Get(items32.GetArrayElementAtIndex(indices[0]).FindPropertyRelative("id").intValue);
-                var kind = firstMeta?.GroupKind ?? PropertyGroupKind.None;
+                if (indices.Count < 2)
+                    continue;
 
-                var ordered = kind == PropertyGroupKind.Color
-                            ? SortByColorChannels(items32, indices, resolver, out _)
-                            : SortByAxis(items32, indices, resolver);
+                if (!groupDefinitions.TryGetValue(kvp.Key, out var definition))
+                    continue;
 
-                int take = Mathf.Clamp(ordered.Count, 2, 4);
-                var draw = ordered.GetRange(0, take);
+                if (!definition.IsValid)
+                    continue;
+
+                var kind = definition.Kind;
+
+                var indexById = new Dictionary<int, int>();
+
+                foreach (int index in indices)
+                {
+                    int id = items32
+                            .GetArrayElementAtIndex(index)
+                            .FindPropertyRelative("id")
+                            .intValue;
+
+                    // Duplicate handling belongs to the duplicate validator.
+                    // For aggregate mapping we keep the first serialized entry.
+                    if (!indexById.ContainsKey(id))
+                        indexById[id] = index;
+                }
+
+                bool isComplete = definition.MemberIds.All(id => indexById.ContainsKey(id));
+
+                if (!isComplete)
+                {
+                    // Partial groups must not be interpreted
+                    // as aggregate values.
+                    //
+                    // Their members will remain unconsumed
+                    // and will be rendered as single rows below.
+                    continue;
+                }
+
+                var draw = definition.MemberIds
+                        .Select(id => indexById[id])
+                        .ToList();
+
                 foreach (var idx in draw) consumed32.Add(idx);
 
                 bool d = draw.Any(ix =>
@@ -200,16 +360,55 @@ namespace DynamicProperty.Editor
                     return (map32.TryGetValue(id, out var c) && c > 1) || ids64.Contains(id);
                 });
 
+                string category = null;
+                int? order = null;
+                int groupSchemaOrder = int.MaxValue;
+
+                var orderedGroupItems = draw.Select(index =>
+                    {
+                        int id = items32.GetArrayElementAtIndex(index).FindPropertyRelative("id").intValue;
+
+                        int orderInSchema = schemaOrder.TryGetValue(id, out var schemaIndex) ? schemaIndex : int.MaxValue;
+
+                        return new
+                        {
+                            Id = id,
+                            Meta = resolver.Get(id),
+                            SchemaOrder = orderInSchema
+                        };
+                    })
+                    .OrderBy(item => item.SchemaOrder)
+                    .ToList();
+
+                foreach (var item in orderedGroupItems)
+                {
+                    groupSchemaOrder = Math.Min(groupSchemaOrder, item.SchemaOrder);
+
+                    if (item.Meta == null)
+                        continue;
+
+                    if (category == null && !string.IsNullOrWhiteSpace(item.Meta.Category))
+                        category = item.Meta.Category;
+
+                    if (!order.HasValue && item.Meta.Order.HasValue)
+                        order = item.Meta.Order;
+                }
+
+                category = NormalizeCategory(category);
+
                 rows.Add(new Row
                 {
                     Bin = Backing.Bit32,
                     IsGroup = true,
                     Kind = kind,
                     Label = kvp.Key,
-                    GroupKey = kvp.Key,
                     Indices = draw,
                     IsDuplicate = d,
-                    Height = EditorGUIUtility.singleLineHeight
+                    Height = EditorGUIUtility.singleLineHeight,
+                    State = RowState.Normal,
+                    Category = category,
+                    Order = order,
+                    SchemaOrder = groupSchemaOrder
                 });
             }
 
@@ -221,16 +420,52 @@ namespace DynamicProperty.Editor
                 int id = items32.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
                 bool d = (map32.TryGetValue(id, out var c) && c > 1) || ids64.Contains(id);
 
+                var meta = resolver.Get(id);
+
+                string category = NormalizeCategory(meta?.Category);
+
+                int? order = meta?.Order;
+
+                int itemSchemaOrder = schemaOrder.TryGetValue(id, out var schemaIndex) ? schemaIndex : int.MaxValue;
+
+                RowState state;
+
+                if (meta == null)
+                {
+                    state = RowState.Unknown;
+                    validation.HasUnknownProperties = true;
+                }
+                else if (IsMemberOfInvalidGroup(meta, groupDefinitions))
+                {
+                    state = RowState.InvalidGroup;
+                }
+                else if (Is64Type(meta))
+                {
+                    state = RowState.WrongStorage;
+                    validation.HasWrongStorage = true;
+                }
+                else if (IsMemberOfPartialGroup(meta, partialGroupNames))
+                {
+                    state = RowState.PartialGroup;
+                }
+                else
+                {
+                    state = RowState.Normal;
+                }
+
                 rows.Add(new Row
                 {
                     Bin = Backing.Bit32,
                     IsGroup = false,
                     Kind = PropertyGroupKind.None,
                     Label = null,
-                    GroupKey = null,
                     Indices = new List<int> { i },
                     IsDuplicate = d,
-                    Height = EditorGUIUtility.singleLineHeight
+                    Height = EditorGUIUtility.singleLineHeight,
+                    State = state,
+                    Category = category,
+                    Order = order,
+                    SchemaOrder = itemSchemaOrder
                 });
             }
 
@@ -240,126 +475,296 @@ namespace DynamicProperty.Editor
                 int id = items64.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
                 bool d = (map64.TryGetValue(id, out var c) && c > 1) || ids32.Contains(id);
 
+                var meta = resolver.Get(id);
+
+                string category = NormalizeCategory(meta?.Category);
+
+                int? order = meta?.Order;
+
+                int itemSchemaOrder = schemaOrder.TryGetValue(id, out var schemaIndex) ? schemaIndex : int.MaxValue;
+
+                RowState state;
+
+                if (meta == null)
+                {
+                    state = RowState.Unknown;
+                    validation.HasUnknownProperties = true;
+                }
+                else if (IsMemberOfInvalidGroup(meta, groupDefinitions))
+                {
+                    state = RowState.InvalidGroup;
+                }
+                else if (!Is64Type(meta))
+                {
+                    state = RowState.WrongStorage;
+                    validation.HasWrongStorage = true;
+                }
+                else if (IsMemberOfPartialGroup(meta, partialGroupNames))
+                {
+                    state = RowState.PartialGroup;
+                }
+                else
+                {
+                    state = RowState.Normal;
+                }
+
                 rows.Add(new Row
                 {
                     Bin = Backing.Bit64,
                     IsGroup = false,
                     Kind = PropertyGroupKind.None,
                     Label = null,
-                    GroupKey = null,
                     Indices = new List<int> { i },
                     IsDuplicate = d,
-                    Height = EditorGUIUtility.singleLineHeight
+                    Height = EditorGUIUtility.singleLineHeight, 
+                    State = state,
+                    Category = category,
+                    Order = order,
+                    SchemaOrder = itemSchemaOrder
                 });
             }
+
+            var categoryOrder = rows
+                .GroupBy(row => row.Category, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Min(row => row.SchemaOrder),
+                    StringComparer.OrdinalIgnoreCase);
+            
+            rows = rows
+                .OrderBy(row => categoryOrder[row.Category])
+                .ThenBy(row => row.Order.HasValue ? 0 : 1)
+                .ThenBy(row => row.Order ?? int.MaxValue)
+                .ThenBy(row => row.SchemaOrder)
+                .ToList();
         }
 
-        // ---------- Add menu (single entry point; routes by PropertyValueType) ----------
-        private void ShowAddMenuUnified(SerializedProperty items32, SerializedProperty items64, IPropertyMetadataResolver resolver)
+        // ---------- Add picker ----------
+
+        private void ShowAddPicker(Rect activatorRect, SerializedProperty propertySet, SerializedProperty items32, SerializedProperty items64, IPropertyMetadataResolver resolver)
         {
-            // existing across both
             var existing = CollectIds(items32);
             existing.UnionWith(CollectIds(items64));
 
             var names = resolver.GetAllNames();
             var values = resolver.GetAllValues();
 
-            var groups32 = new Dictionary<string, (PropertyGroupKind kind, List<(int id, string disp)>)>(StringComparer.OrdinalIgnoreCase);
-            var singles = new List<(int id, string disp, PropertyMetadata meta)>();
+            var groupDefinitions = PropertyGroupValidator.Build(resolver);
+
+            var groups32 = new Dictionary<string, (PropertyGroupKind kind, List<(int id, string displayName)> items)>(StringComparer.OrdinalIgnoreCase);
+
+            var singles = new List<(int id, string displayName, PropertyMetadata meta)>();
 
             for (int i = 0; i < values.Length; i++)
             {
                 int id = values[i];
-                if (existing.Contains(id)) continue;
+
+                if (existing.Contains(id))
+                    continue;
 
                 var meta = resolver.Get(id);
-                if (meta == null) continue;
 
-                if (meta.HiddenInEditor || id == 0) continue;
+                if (meta == null)
+                    continue;
 
-                string disp = meta.DisplayName ?? names[i];
+                if (meta.HiddenInEditor || id == 0)
+                    continue;
 
-                // Group only applies to 32-bit float items
-                if (meta.Type == PropertyValueType.Float && !string.IsNullOrEmpty(meta.GroupName))
+                string displayName = meta.DisplayName ?? names[i];
+
+                if (!string.IsNullOrWhiteSpace(meta.GroupName))
                 {
-                    if (!groups32.TryGetValue(meta.GroupName, out var entry))
-                        entry = (meta.GroupKind, new List<(int, string)>());
-                    entry.Item2.Add((id, disp));
-                    groups32[meta.GroupName] = entry;
-                }
-                else
-                {
-                    singles.Add((id, disp, meta));
-                }
-            }
+                    string groupName = meta.GroupName.Trim();
 
-            var menu = new GenericMenu();
+                    if (!groupDefinitions.TryGetValue(groupName, out var definition))
+                        continue;
 
-            // 32-bit groups (display if any member missing — enforced by existing filter)
-            foreach (var kvp in groups32.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                var label = kvp.Key;
-                var kind = kvp.Value.kind;
-                if (kind == PropertyGroupKind.Color) label += "  (Color)";
-                else if (kind == PropertyGroupKind.Vector2) label += "  (Vector2)";
-                else if (kind == PropertyGroupKind.Vector3) label += "  (Vector3)";
-                else if (kind == PropertyGroupKind.Vector4) label += "  (Vector4)";
+                    // Invalid groups cannot be added from the picker.
+                    if (!definition.IsValid)
+                        continue;
 
-                var items = kvp.Value.Item2;
-                menu.AddItem(new GUIContent(label), false, () =>
-                {
-                    foreach (var (id, _) in items)
+                    if (!groups32.TryGetValue(groupName, out var group))
                     {
-                        var meta = resolver.Get(id);
-
-                        Add32(items32, id, GetInitialRaw32(meta));
+                        group = (definition.Kind, new List<(int, string)>());
                     }
-                    items32.serializedObject.ApplyModifiedProperties();
-                });
+
+                    group.items.Add((id, displayName));
+
+                    groups32[groupName] = group;
+
+                    continue;
+                }
+
+                singles.Add((id, displayName, meta));
             }
 
-            if (menu.GetItemCount() > 0 && singles.Count > 0) menu.AddSeparator("");
+            var pickerItems = new List<PropertyPickerPopup.Item>();
 
-            // Singles: route by type
-            foreach (var entry in singles.OrderBy(s => s.disp, StringComparer.OrdinalIgnoreCase))
+            AddGroupPickerItems(pickerItems, groups32, groupDefinitions, propertySet, items32, resolver);
+
+            AddSinglePickerItems(pickerItems, singles, propertySet, items32, items64);
+
+            PopupWindow.Show(activatorRect, new PropertyPickerPopup(pickerItems));
+        }
+
+        private void AddGroupPickerItems(
+            List<PropertyPickerPopup.Item> pickerItems,
+            Dictionary<string, (PropertyGroupKind kind, List<(int id, string displayName)> items)> groups,
+            IReadOnlyDictionary<string, PropertyGroupDefinition> definitions,
+            SerializedProperty propertySet,
+            SerializedProperty items32,
+            IPropertyMetadataResolver resolver)
+        {
+            foreach (var kvp in groups)
             {
-                bool is64 = Is64Type(entry.meta);
-                var content = new GUIContent(entry.disp + (is64 ? "  (64)" : "  (32)"));
-                menu.AddItem(content, false, () =>
+                string groupName = kvp.Key;
+                var group = kvp.Value;
+
+                if (!definitions.TryGetValue(groupName, out var definition))
+                    continue;
+
+                if (!definition.IsValid)
+                    continue;
+
+                string label = groupName;
+
+                switch (group.kind)
                 {
-                    var meta = resolver.Get(entry.id);
+                    case PropertyGroupKind.Color:
+                        label += " (Color)";
+                        break;
 
-                    if (is64)
-                        Add64(items64, entry.id, GetInitialRaw64(meta));
-                    else
-                        Add32(items32, entry.id, GetInitialRaw32(meta));
+                    case PropertyGroupKind.Vector2:
+                        label += " (Vector2)";
+                        break;
 
-                    items32.serializedObject.ApplyModifiedProperties();
-                });
+                    case PropertyGroupKind.Vector3:
+                        label += " (Vector3)";
+                        break;
+
+                    case PropertyGroupKind.Vector4:
+                        label += " (Vector4)";
+                        break;
+                }
+
+                var itemsById = group.items.ToDictionary(item => item.id);
+
+                var capturedItems = definition.MemberIds
+                        .Where(itemsById.ContainsKey)
+                        .Select(id => itemsById[id])
+                        .ToArray();
+
+                string searchText = label + " " + string.Join(" ", capturedItems.Select(x => x.displayName));
+
+                string category = null;
+                string tooltip = null;
+                int? order = null;
+
+                foreach (int memberId in definition.MemberIds)
+                {
+                    var meta = resolver.Get(memberId);
+
+                    if (meta == null)
+                        continue;
+
+                    if (category == null && !string.IsNullOrWhiteSpace(meta.Category))
+                        category = meta.Category;
+
+                    if (tooltip == null && !string.IsNullOrWhiteSpace(meta.Tooltip))
+                        tooltip = meta.Tooltip;
+
+                    if (!order.HasValue && meta.Order.HasValue)
+                        order = meta.Order;
+
+                    if (category != null && tooltip != null && order.HasValue)
+                        break;
+                }
+
+                pickerItems.Add(new PropertyPickerPopup.Item(label, searchText, category, order, tooltip, () =>
+                    {
+                        foreach (var item in capturedItems)
+                        {
+                            var meta = resolver.Get(item.id);
+
+                            Add32(items32, item.id, GetInitialRaw32(meta));
+                        }
+
+                        MarkStructureChanged(propertySet);
+
+                        propertySet.serializedObject.ApplyModifiedProperties();
+                    }));
             }
+        }
 
-            if (menu.GetItemCount() == 0)
-                menu.AddDisabledItem(new GUIContent("No unused properties"));
+        private void AddSinglePickerItems(
+            List<PropertyPickerPopup.Item> pickerItems,
+            List<(int id, string displayName, PropertyMetadata meta)> singles,
+            SerializedProperty propertySet,
+            SerializedProperty items32,
+            SerializedProperty items64)
+        {
+            foreach (var entry in singles)
+            {
+                int id = entry.id;
+                string displayName = entry.displayName;
+                PropertyMetadata meta = entry.meta;
 
-            menu.ShowAsContext();
+                bool is64 = Is64Type(meta);
+
+                string label = displayName;
+
+                pickerItems.Add(
+                    new PropertyPickerPopup.Item(label, displayName, meta.Category, meta.Order, meta.Tooltip, () =>
+                        {
+                            if (is64)
+                                Add64(items64, id, GetInitialRaw64(meta));
+                            else
+                                Add32(items32, id, GetInitialRaw32(meta));
+
+                            MarkStructureChanged(propertySet);
+
+                            propertySet.serializedObject.ApplyModifiedProperties();
+                        }));
+            }
         }
 
         // ---------- 32-bit grouped row ----------
-        private void DrawGroupRow32(Rect r, Row row, SerializedProperty items32, IPropertyMetadataResolver resolver)
+        private bool DrawGroupRow32(Rect r, SerializedProperty propertySet, Row row, SerializedProperty items32, IPropertyMetadataResolver resolver)
         {
             var minusRect = new Rect(r.xMax - 22f, r.y, 20f, r.height);
             if (GUI.Button(minusRect, "x", EditorStyles.miniButton))
             {
                 var ids = row.Indices.Select(ix => items32.GetArrayElementAtIndex(ix).FindPropertyRelative("id").intValue);
                 RemoveByIds(items32, ids);
-                items32.serializedObject.ApplyModifiedProperties();
-                return;
+
+                MarkStructureChanged(propertySet);
+                propertySet.serializedObject.ApplyModifiedProperties();
+
+                return true;
             }
 
             float third = r.width / 3f;
             var labelRect = new Rect(r.x, r.y, third, r.height);
             var fieldRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 27f, r.height);
-            EditorGUI.LabelField(labelRect, row.Label);
+
+            string tooltip = null;
+
+            foreach (int index in row.Indices)
+            {
+                var element = items32.GetArrayElementAtIndex(index);
+
+                int id = element .FindPropertyRelative("id") .intValue;
+
+                var meta = resolver.Get(id);
+
+                if (meta == null || string.IsNullOrWhiteSpace(meta.Tooltip))
+                    continue;
+
+                tooltip = meta.Tooltip;
+                break;
+            }
+
+            EditorGUI.LabelField(labelRect, new GUIContent(row.Label, tooltip));
 
             int comp = row.Indices.Count;
             var vals = new float[comp];
@@ -372,7 +777,9 @@ namespace DynamicProperty.Editor
 
             if (row.Kind == PropertyGroupKind.Color && comp >= 3)
             {
-                var ordered = SortByColorChannels(items32, row.Indices, resolver, out int use);
+                var ordered = row.Indices;
+
+                int use = Mathf.Min(4, ordered.Count);
                 var rgba = new float[4] { 1, 1, 1, 1 };
                 for (int i = 0; i < use; i++)
                 {
@@ -431,31 +838,43 @@ namespace DynamicProperty.Editor
                     items32.serializedObject.ApplyModifiedProperties();
                 }
             }
+
+            return false;
         }
 
         // ---------- 32-bit single ----------
-        private void DrawSingleRow32(Rect r, SerializedProperty items32, int index, IPropertyMetadataResolver resolver)
+        private bool DrawSingleRow32(Rect r, SerializedProperty propertySet, SerializedProperty items32, int index, IPropertyMetadataResolver resolver)
         {
             var elem = items32.GetArrayElementAtIndex(index);
             var idProp = elem.FindPropertyRelative("id");
             var rawProp = elem.FindPropertyRelative("rawValue");
 
             int id = idProp.intValue;
-            var meta = resolver.Get(id) ?? new PropertyMetadata { Type = PropertyValueType.Int };
+            var meta = resolver.Get(id);
+
+            if (meta == null)
+                return DrawInvalidRow(r, propertySet, items32, index, $"Unknown Property (ID {id})", $"Raw: {rawProp.intValue}", MessageType.Warning);
+
             string label = meta.DisplayName ?? Enum.GetName(resolver.BoundEnumType, id) ?? $"ID {id}";
+
+            if (Is64Type(meta))
+                return DrawInvalidRow(r, propertySet, items32, index, label, $"Expected 64-bit storage. Raw: {rawProp.intValue}", MessageType.Error);
 
             float third = r.width / 3f;
             var keyRect = new Rect(r.x, r.y, third, r.height);
             var valRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 27f, r.height);
             var minusRect = new Rect(r.xMax - 22f, r.y, 20f, r.height);
 
-            EditorGUI.LabelField(keyRect, label);
+            EditorGUI.LabelField(keyRect, new GUIContent(label, meta.Tooltip));
 
             if (GUI.Button(minusRect, "x", EditorStyles.miniButton))
             {
                 items32.DeleteArrayElementAtIndex(index);
-                items32.serializedObject.ApplyModifiedProperties();
-                return;
+
+                MarkStructureChanged(propertySet);
+                propertySet.serializedObject.ApplyModifiedProperties();
+
+                return true;
             }
 
             switch (meta.Type)
@@ -495,7 +914,14 @@ namespace DynamicProperty.Editor
                             break;
                         }
 
-                        rawProp.intValue = PropertyDrawerUtil.DrawEnum32(valRect, rawProp.intValue, meta.EnumType);
+                        rawProp.intValue = PropertyDrawerUtil.DrawEnum32(valRect, rawProp.intValue, meta.EnumType,
+                            value =>
+                            {
+                                rawProp.intValue = value;
+
+                                rawProp.serializedObject
+                                    .ApplyModifiedProperties();
+                            });
 
                         break;
                     }
@@ -503,31 +929,46 @@ namespace DynamicProperty.Editor
                     EditorGUI.HelpBox(valRect, $"Type not handled (32): {meta.Type}", MessageType.None);
                     break;
             }
+
+            return false;
         }
 
         // ---------- 64-bit single ----------
-        private void DrawSingleRow64(Rect r, SerializedProperty items64, int index, IPropertyMetadataResolver resolver)
+        private bool DrawSingleRow64(Rect r, SerializedProperty propertySet, SerializedProperty items64, int index, IPropertyMetadataResolver resolver)
         {
             var elem = items64.GetArrayElementAtIndex(index);
             var idProp = elem.FindPropertyRelative("id");
             var rawProp = elem.FindPropertyRelative("rawValue");
 
             int id = idProp.intValue;
-            var meta = resolver.Get(id) ?? new PropertyMetadata { Type = PropertyValueType.Long };
-            string label = meta.DisplayName ?? Enum.GetName(resolver.BoundEnumType, id) ?? $"ID {id}";
+            var meta = resolver.Get(id);
+
+            if (meta == null)
+                return DrawInvalidRow(r, propertySet, items64, index, $"Unknown Property (ID {id})", $"Raw: {rawProp.longValue}", MessageType.Warning);
+
+            string label =
+                meta.DisplayName ??
+                Enum.GetName(resolver.BoundEnumType, id) ??
+                $"ID {id}";
+
+            if (!Is64Type(meta))
+                return DrawInvalidRow(r, propertySet, items64, index, label, $"Expected 32-bit storage. Raw: {rawProp.longValue}", MessageType.Error);
 
             float third = r.width / 3f;
             var keyRect = new Rect(r.x, r.y, third, r.height);
             var valRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 27f, r.height);
             var minusRect = new Rect(r.xMax - 22f, r.y, 20f, r.height);
 
-            EditorGUI.LabelField(keyRect, label);
+            EditorGUI.LabelField(keyRect, new GUIContent(label, meta.Tooltip));
 
             if (GUI.Button(minusRect, "x", EditorStyles.miniButton))
             {
                 items64.DeleteArrayElementAtIndex(index);
-                items64.serializedObject.ApplyModifiedProperties();
-                return;
+
+                MarkStructureChanged(propertySet);
+                propertySet.serializedObject.ApplyModifiedProperties();
+
+                return true;
             }
 
             long raw = rawProp.longValue;
@@ -632,7 +1073,14 @@ namespace DynamicProperty.Editor
                             break;
                         }
 
-                        rawProp.longValue = PropertyDrawerUtil.DrawEnum64(valRect, rawProp.longValue, meta.EnumType);
+                        rawProp.longValue = PropertyDrawerUtil.DrawEnum64(valRect, rawProp.longValue, meta.EnumType,
+                            value =>
+                            {
+                                rawProp.longValue = value;
+
+                                rawProp.serializedObject
+                                    .ApplyModifiedProperties();
+                            });
 
                         break;
                     }
@@ -640,9 +1088,54 @@ namespace DynamicProperty.Editor
                     EditorGUI.HelpBox(valRect, $"Type not handled (64): {meta.Type}", MessageType.None);
                     break;
             }
+
+            return false;
         }
 
         // ---------- Helpers ----------
+
+        private static bool DrawInvalidRow(
+            Rect r,
+            SerializedProperty propertySet,
+            SerializedProperty list,
+            int index,
+            string label,
+            string message,
+            MessageType severity)
+        {
+            float third = r.width / 3f;
+
+            var iconRect = new Rect(r.x + 2f, r.y, 18f, r.height);
+
+            var labelRect = new Rect(r.x + 22f, r.y, third - 22f, r.height);
+
+            var messageRect = new Rect(r.x + third + 5f, r.y, 2f * third - 5f - 27f, r.height);
+
+            var removeRect = new Rect(r.xMax - 22f, r.y, 20f, r.height);
+
+            GUIContent icon =
+                severity == MessageType.Error
+                    ? EditorGUIUtility.IconContent("console.erroricon.sml")
+                    : EditorGUIUtility.IconContent("console.warnicon.sml");
+
+            EditorGUI.LabelField(iconRect, icon);
+
+            EditorGUI.LabelField(labelRect, label);
+
+            EditorGUI.LabelField(messageRect, message, EditorStyles.miniLabel);
+
+            if (!GUI.Button(removeRect, "x", EditorStyles.miniButton))
+                return false;
+
+            list.DeleteArrayElementAtIndex(index);
+
+            MarkStructureChanged(propertySet);
+
+            propertySet.serializedObject
+                .ApplyModifiedProperties();
+
+            return true;
+        }
 
         private static void MarkStructureChanged(SerializedProperty propertySet)
         {
@@ -726,55 +1219,6 @@ namespace DynamicProperty.Editor
             }
         }
 
-        private List<int> SortByAxis(SerializedProperty items32, List<int> indices, IPropertyMetadataResolver resolver)
-        {
-            int Score(string name)
-            {
-                if (string.IsNullOrEmpty(name)) return 99;
-                var n = name.Trim().ToLowerInvariant();
-                if (n.EndsWith(" x") || n.EndsWith(".x") || n.EndsWith("x")) return 0;
-                if (n.EndsWith(" y") || n.EndsWith(".y") || n.EndsWith("y")) return 1;
-                if (n.EndsWith(" z") || n.EndsWith(".z") || n.EndsWith("z")) return 2;
-                if (n.EndsWith(" w") || n.EndsWith(".w") || n.EndsWith("w")) return 3;
-                return 99;
-            }
-
-            return indices.OrderBy(i =>
-            {
-                var e = items32.GetArrayElementAtIndex(i);
-                int id = e.FindPropertyRelative("id").intValue;
-                var meta = resolver.Get(id);
-                var disp = meta?.DisplayName ?? Enum.GetName(resolver.BoundEnumType, id);
-                return Score(disp);
-            }).ToList();
-        }
-
-        private List<int> SortByColorChannels(SerializedProperty items32, List<int> indices, IPropertyMetadataResolver resolver, out int use)
-        {
-            int Score(string name)
-            {
-                if (string.IsNullOrEmpty(name)) return 99;
-                var n = name.Trim().ToLowerInvariant();
-                if (n.EndsWith(" r") || n.EndsWith(".r") || n.EndsWith("r")) return 0;
-                if (n.EndsWith(" g") || n.EndsWith(".g") || n.EndsWith("g")) return 1;
-                if (n.EndsWith(" b") || n.EndsWith(".b") || n.EndsWith("b")) return 2;
-                if (n.EndsWith(" a") || n.EndsWith(".a") || n.EndsWith("a")) return 3;
-                return 99;
-            }
-
-            var ordered = indices.OrderBy(i =>
-            {
-                var e = items32.GetArrayElementAtIndex(i);
-                int id = e.FindPropertyRelative("id").intValue;
-                var meta = resolver.Get(id);
-                var disp = meta?.DisplayName ?? Enum.GetName(resolver.BoundEnumType, id);
-                return Score(disp);
-            }).ToList();
-
-            use = Mathf.Min(4, ordered.Count);
-            return ordered;
-        }
-
         private static void WriteFloat(SerializedProperty items32, int itemIndex, float value)
         {
             var e = items32.GetArrayElementAtIndex(itemIndex);
@@ -834,6 +1278,88 @@ namespace DynamicProperty.Editor
                 default:
                     return 0L;
             }
+        }
+
+        private static string GetValidationSummaryMessage(ValidationSummary validation)
+        {
+            var problems = new List<string>();
+
+            if (validation.HasDuplicates)
+                problems.Add("duplicate/conflicting IDs");
+
+            if (validation.HasWrongStorage)
+                problems.Add("wrong-storage entries");
+
+            if (validation.HasInvalidGroups)
+                problems.Add("invalid group definitions");
+
+            if (validation.HasUnknownProperties)
+                problems.Add("unknown properties");
+
+            if (validation.HasPartialGroups)
+                problems.Add("incomplete aggregate groups");
+
+            return
+                "PropertySet contains " +
+                string.Join(", ", problems) +
+                ". Remove or migrate the highlighted entries.";
+        }
+
+        private static string NormalizeCategory(string category)
+        {
+            return string.IsNullOrWhiteSpace(category)
+                ? "General"
+                : category.Trim();
+        }
+
+        private static float GetCategoryHeaderHeight()
+        {
+            const float topSpacing = 6f;
+            const float separatorHeight = 1f;
+            const float bottomSpacing = 4f;
+
+            return
+                topSpacing +
+                EditorGUIUtility.singleLineHeight +
+                separatorHeight +
+                bottomSpacing;
+        }
+
+        private static float DrawCategoryHeader(Rect position, float y, string category)
+        {
+            const float topSpacing = 6f;
+
+            float lineHeight = EditorGUIUtility.singleLineHeight;
+
+            float labelY = y + topSpacing;
+
+            var labelRect = new Rect(position.x + 2f, labelY, position.width - 4f, lineHeight);
+
+            EditorGUI.LabelField(labelRect, category, EditorStyles.boldLabel);
+
+            var separatorRect = new Rect(position.x, labelRect.yMax, position.width, 1f);
+
+            EditorGUI.DrawRect(separatorRect, new Color(0.5f, 0.5f, 0.5f, 0.35f));
+
+            return GetCategoryHeaderHeight();
+        }
+
+        private static bool IsMemberOfInvalidGroup(PropertyMetadata meta, IReadOnlyDictionary<string, PropertyGroupDefinition> definitions)
+        {
+            if (meta == null || string.IsNullOrWhiteSpace(meta.GroupName))
+                return false;
+
+            string groupName = meta.GroupName.Trim();
+
+            return definitions.TryGetValue(groupName, out var definition) && !definition.IsValid;
+        }
+
+        private static bool IsMemberOfPartialGroup(PropertyMetadata meta, HashSet<string> partialGroupNames)
+        {
+            if (meta == null || string.IsNullOrWhiteSpace(meta.GroupName))
+                return false;
+
+            return partialGroupNames.Contains(meta.GroupName.Trim());
         }
     }
 }

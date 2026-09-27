@@ -16,30 +16,17 @@ MonoBehaviour:
     _items32:
     - id: 1
       rawValue: 100
-    - id: 2
-      rawValue: 1
-    - id: 10
-      rawValue: 0
-    - id: 11
-      rawValue: 0
-    - id: 12
-      rawValue: 0
-    - id: 13
-      rawValue: 0
-    - id: 14
-      rawValue: 1
     - id: 3
-      rawValue: 2
+      rawValue: 3
+    - id: 15
+      rawValue: 4
     - id: 6
       rawValue: 0
     - id: 7
       rawValue: 0
     - id: 8
       rawValue: 0
-    - id: 16
-      rawValue: 2
     _items64:
-    - id: 4
-      rawValue: 638713695000000000
     - id: 5
-      rawValue: 4800000000
+      rawValue: 0
+    _structureVersion: 39

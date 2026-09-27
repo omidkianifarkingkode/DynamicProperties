@@ -13,6 +13,10 @@ MonoBehaviour:
   m_Name: Weapon Data
   m_EditorClassIdentifier: DynamicProperty.Samples.Basic::DynamicProperty.Samples.Basic.WeaponData
   Properties:
-    _items32: []
+    _items32:
+    - id: 1
+      rawValue: 100
+    - id: 2
+      rawValue: 1
     _items64: []
     _structureVersion: 0

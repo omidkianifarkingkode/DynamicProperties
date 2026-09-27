@@ -8,7 +8,7 @@ namespace DynamicProperty.Samples.Basic
         None = 0,
 
         [PropertyType(typeof(int), 100), MinMax(0, 1000)]
-        Deamage = 1,
+        Demage = 1,
 
         [PropertyType(typeof(bool), true)]
         Meele = 2,

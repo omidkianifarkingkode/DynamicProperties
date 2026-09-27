@@ -59,25 +59,63 @@ namespace DynamicProperty.Editor
 
         public static bool DrawBool(Rect r, bool v) => EditorGUI.Toggle(r, v);
 
-        public static int DrawEnum32(Rect rect, int raw, Type enumType)
+        public static int DrawEnum32(Rect rect, int raw, Type enumType, Action<int> onFlagsChanged = null)
         {
-            ulong bits = unchecked((uint)raw);
+            bool isFlags =
+                enumType != null &&
+                enumType.IsDefined(typeof(FlagsAttribute), false);
 
-            bits = DrawEnumBits(rect, bits, enumType);
+            if (!isFlags)
+            {
+                ulong bits = unchecked((uint)raw);
 
-            return unchecked((int)(uint)bits);
+                bits = DrawNormalEnum(rect, bits, enumType);
+
+                return unchecked((int)(uint)bits);
+            }
+
+            DrawFlagsEnum(
+                rect,
+                unchecked((uint)raw),
+                enumType,
+                bits =>
+                {
+                    onFlagsChanged?.Invoke(
+                        unchecked((int)(uint)bits));
+                });
+
+            return raw;
         }
 
-        public static long DrawEnum64(Rect rect, long raw, Type enumType)
+        public static long DrawEnum64(Rect rect, long raw, Type enumType, Action<long> onFlagsChanged = null)
         {
-            ulong bits = unchecked((ulong)raw);
+            bool isFlags =
+                enumType != null &&
+                enumType.IsDefined(typeof(FlagsAttribute), false);
 
-            bits = DrawEnumBits(rect, bits, enumType);
+            if (!isFlags)
+            {
+                ulong bits = unchecked((ulong)raw);
 
-            return unchecked((long)bits);
+                bits = DrawNormalEnum(rect, bits, enumType);
+
+                return unchecked((long)bits);
+            }
+
+            DrawFlagsEnum(
+                rect,
+                unchecked((ulong)raw),
+                enumType,
+                bits =>
+                {
+                    onFlagsChanged?.Invoke(
+                        unchecked((long)bits));
+                });
+
+            return raw;
         }
 
-        private static ulong DrawEnumBits(Rect rect, ulong rawBits, Type enumType)
+        private static ulong DrawNormalEnum(Rect rect, ulong rawBits, Type enumType)
         {
             if (enumType == null)
             {
@@ -92,35 +130,109 @@ namespace DynamicProperty.Editor
 
             var current = EnumBitUtility.FromUInt64Bits(enumType, rawBits);
 
-            bool isFlags = enumType.IsDefined(typeof(FlagsAttribute), false);
-
             EditorGUI.BeginChangeCheck();
 
-            Enum next = isFlags
-                ? EditorGUI.EnumFlagsField(rect, current)
-                : EditorGUI.EnumPopup(rect, current);
+            var next = EditorGUI.EnumPopup(rect, current);
 
             if (!EditorGUI.EndChangeCheck())
                 return rawBits;
 
-            ulong nextBits = EnumBitUtility.ToUInt64Bits(enumType, next);
+            return EnumBitUtility .ToUInt64Bits(enumType, next) & widthMask;
+        }
 
-            if (isFlags)
+        private static void DrawFlagsEnum(Rect rect, ulong rawBits, Type enumType, Action<ulong> onChanged)
+        {
+            if (enumType == null)
             {
-                ulong definedMask = EnumBitUtility.GetDefinedBitsMask(enumType);
+                EditorGUI.HelpBox(rect, "Enum type not defined!", MessageType.Warning);
 
-                // Preserve unknown bits.
-                ulong unknownBits =
-                    rawBits &
-                    ~definedMask &
-                    widthMask;
-
-                nextBits =
-                    (nextBits & definedMask) |
-                    unknownBits;
+                return;
             }
 
-            return nextBits & widthMask;
+            ulong widthMask = EnumBitUtility.GetStorageMask(enumType);
+
+            rawBits &= widthMask;
+
+            string label = GetFlagsDisplayName(enumType, rawBits);
+
+            if (!EditorGUI.DropdownButton(rect, new GUIContent(label), FocusType.Keyboard))
+            {
+                return;
+            }
+
+            var menu = new GenericMenu();
+
+            string[] names = Enum.GetNames(enumType);
+
+            foreach (string name in names)
+            {
+                var enumValue = (Enum)Enum.Parse(enumType, name);
+
+                ulong flagBits = EnumBitUtility.ToUInt64Bits(enumType, enumValue) & widthMask;
+
+                bool isChecked = flagBits == 0 ? rawBits == 0 : (rawBits & flagBits) == flagBits;
+
+                menu.AddItem(
+                    new GUIContent(name),
+                    isChecked,
+                    () =>
+                    {
+                        ulong nextBits;
+
+                        if (flagBits == 0)
+                        {
+                            // Explicit None / zero member.
+                            nextBits = 0;
+                        }
+                        else if ((rawBits & flagBits) == flagBits)
+                        {
+                            // Checked → remove all bits belonging
+                            // to this member, including composites.
+                            nextBits = rawBits & ~flagBits;
+                        }
+                        else
+                        {
+                            // Unchecked → add all bits belonging
+                            // to this member.
+                            nextBits = rawBits | flagBits;
+                        }
+
+                        nextBits &= widthMask;
+
+                        onChanged?.Invoke(nextBits);
+                    });
+            }
+
+            menu.ShowAsContext();
+        }
+
+        private static string GetFlagsDisplayName(Type enumType, ulong rawBits)
+        {
+            ulong widthMask = EnumBitUtility.GetStorageMask(enumType);
+
+            rawBits &= widthMask;
+
+            var value = EnumBitUtility.FromUInt64Bits(enumType, rawBits);
+
+            string text = value.ToString();
+
+            if (!string.IsNullOrEmpty(text) && !IsNumericEnumText(text))
+                return text;
+
+            if (rawBits == 0)
+                return "None";
+
+            return $"0x{rawBits:X}";
+        }
+
+        private static bool IsNumericEnumText(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return false;
+
+            char first = value[0];
+
+            return char.IsDigit(first) || first == '-';
         }
 
         // DateTime as ticks in long, UI "yyyy-MM-dd HH:mm:ss" + [-][+][Now]

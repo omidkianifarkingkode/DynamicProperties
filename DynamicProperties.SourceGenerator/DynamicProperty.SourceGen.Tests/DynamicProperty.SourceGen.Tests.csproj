@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\DynamicProperty.SourceGen.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- IMPORTANT:
+         Use exactly the same Microsoft.CodeAnalysis.CSharp version
+         as the SourceGen project. -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.0" />
+
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+
+		<PackageReference Include="NUnit" Version="3.14.0" />
+
+		<PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+	</ItemGroup>
+
+</Project>

@@ -87,3 +87,5 @@ Flowcast.Unity/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 .vsconfig
 DynamicProperties.Unity/*.sln
 DynamicProperties.Unity/*.csproj
+DynamicProperties.SourceGenerator/DynamicProperty.SourceGen.Tests/bin
+DynamicProperties.SourceGenerator/bin

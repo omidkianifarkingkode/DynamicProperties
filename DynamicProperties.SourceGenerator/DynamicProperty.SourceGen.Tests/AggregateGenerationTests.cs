@@ -273,20 +273,20 @@ namespace Game
         string source =
             result.GeneratedSource;
 
-        Assert.That(source, Does.Contain("return TryGetSpawnPosition(set, out var value) ? value : default;"));
-        Assert.That(source, Does.Contain("!set.TryGetFloat((int)global::Game.CharacterProperties.PosX, out var c0) ||"));
-        Assert.That(source, Does.Contain("!set.TryGetFloat((int)global::Game.CharacterProperties.PosY, out var c1) ||"));
-        Assert.That(source, Does.Contain("!set.TryGetFloat((int)global::Game.CharacterProperties.PosZ, out var c2)"));
+        Assert.That(source, Does.Contain("return TryGetSpawnPosition(view, out var value) ? value : default;"));
+        Assert.That(source, Does.Contain("!view.PropertySet.TryGetFloat((int)global::Game.CharacterProperties.PosX, out var c0) ||"));
+        Assert.That(source, Does.Contain("!view.PropertySet.TryGetFloat((int)global::Game.CharacterProperties.PosY, out var c1) ||"));
+        Assert.That(source, Does.Contain("!view.PropertySet.TryGetFloat((int)global::Game.CharacterProperties.PosZ, out var c2)"));
         Assert.That(source, Does.Contain("value = default;"));
         Assert.That(source, Does.Contain("return false;"));
         Assert.That(source, Does.Contain("new global::UnityEngine.Vector3(c0, c1, c2);"));
-        Assert.That(source, Does.Contain("set.ContainsAny((int)global::Game.CharacterProperties.PosX) && set.ContainsAny((int)global::Game.CharacterProperties.PosY) && set.ContainsAny((int)global::Game.CharacterProperties.PosZ);"));
-        Assert.That(source, Does.Contain("set.SetFloat((int)global::Game.CharacterProperties.PosX, value.x);"));
-        Assert.That(source, Does.Contain("set.SetFloat((int)global::Game.CharacterProperties.PosY, value.y);"));
-        Assert.That(source, Does.Contain("set.SetFloat((int)global::Game.CharacterProperties.PosZ, value.z);"));
-        Assert.That(source, Does.Contain("set.Remove((int)global::Game.CharacterProperties.PosX);"));
-        Assert.That(source, Does.Contain("set.Remove((int)global::Game.CharacterProperties.PosY);"));
-        Assert.That(source, Does.Contain("set.Remove((int)global::Game.CharacterProperties.PosZ);"));
+        Assert.That(source, Does.Contain("view.PropertySet.ContainsAny((int)global::Game.CharacterProperties.PosX) && view.PropertySet.ContainsAny((int)global::Game.CharacterProperties.PosY) && view.PropertySet.ContainsAny((int)global::Game.CharacterProperties.PosZ);"));
+        Assert.That(source, Does.Contain("view.PropertySet.SetFloat((int)global::Game.CharacterProperties.PosX, value.x);"));
+        Assert.That(source, Does.Contain("view.PropertySet.SetFloat((int)global::Game.CharacterProperties.PosY, value.y);"));
+        Assert.That(source, Does.Contain("view.PropertySet.SetFloat((int)global::Game.CharacterProperties.PosZ, value.z);"));
+        Assert.That(source, Does.Contain("view.PropertySet.Remove((int)global::Game.CharacterProperties.PosX);"));
+        Assert.That(source, Does.Contain("view.PropertySet.Remove((int)global::Game.CharacterProperties.PosY);"));
+        Assert.That(source, Does.Contain("view.PropertySet.Remove((int)global::Game.CharacterProperties.PosZ);"));
 
         Assert.That(
             result.CompilationErrors,
@@ -301,26 +301,26 @@ namespace Game
         Assert.That(
             source,
             Does.Contain(
-                $"public static {typeName} {groupName}("));
+                $"public static {typeName} {groupName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static bool TryGet{groupName}("));
+                $"public static bool TryGet{groupName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view, out {typeName} value)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static bool Has{groupName}("));
+                $"public static bool Has{groupName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static void Set{groupName}("));
+                $"public static void Set{groupName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view, {typeName} value)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static void Remove{groupName}("));
+                $"public static void Remove{groupName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view)"));
     }
 }

@@ -1,25 +1,27 @@
 ﻿using DynamicProperty.DataAnnotations;
 using UnityEngine;
+using static UnityEngine.Audio.GeneratorInstance;
 
 namespace DynamicProperty.Samples.Basic
 {
     [CreateAssetMenu(fileName = "Character Data", menuName = "DynamicProperty/Create Sample Character Data")]
     public class CharacterData : ScriptableObject
     {
-        [PropertySchema(typeof(CharacterProperties))]
-        [SerializeField] protected PropertySet Properties;
+        [SerializeField] protected PropertySet properties;
 
         [ContextMenu("DynamicProperty/Print Properties")]
         private void PrintProperties()
         {
-            Debug.Log(Properties != null ? Properties.ToString() : "<null>", this);
+            var character = properties.For<CharacterProperties>();
 
-            Debug.Log(Properties.Health(), this);
-            Debug.Log(Properties.IsBoss(), this);
-            Debug.Log(Properties.Weapon(), this);
+            Debug.Log(properties != null ? properties.ToString() : "<null>", this);
 
-            Debug.Log(Properties.PosX(), this);
-            Debug.Log(Properties.ColorR(), this);
+            Debug.Log(character.Health(), this);
+            Debug.Log(character.IsBoss(), this);
+            Debug.Log(character.Weapon(), this);
+
+            Debug.Log(character.SpawnPosition(), this);
+            Debug.Log(character.BodyColor(), this);
         }
     }
 }

@@ -30,6 +30,7 @@ namespace DynamicProperty
         [NonSerialized] private bool _indexed;
 
         [SerializeField, HideInInspector] private int _structureVersion;
+        [SerializeField, HideInInspector] private string _editorSchemaTypeName;
 
         [NonSerialized] private int _indexedStructureVersion;
         [NonSerialized] private int _indexedCount32;

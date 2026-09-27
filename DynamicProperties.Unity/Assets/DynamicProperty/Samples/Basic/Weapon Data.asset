@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfcae5a0508b5e549adb11142ebbff40, type: 3}
   m_Name: Weapon Data
   m_EditorClassIdentifier: DynamicProperty.Samples.Basic::DynamicProperty.Samples.Basic.WeaponData
-  Properties:
+  properties:
     _items32:
-    - id: 1
+    - id: 3
       rawValue: 100
-    - id: 2
-      rawValue: 1
     _items64: []
-    _structureVersion: 0
+    _structureVersion: 1
+    _editorSchemaTypeName: DynamicProperty.Samples.Basic.WeaponProperties, DynamicProperty.Samples.Basic,
+      Version=0.0.0.0, Culture=neutral, PublicKeyToken=null

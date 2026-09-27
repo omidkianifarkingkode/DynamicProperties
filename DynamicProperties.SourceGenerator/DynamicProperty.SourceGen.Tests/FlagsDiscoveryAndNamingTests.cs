@@ -41,6 +41,8 @@ namespace Game
         Assert.That(source, Does.Contain("public static bool IsAttackRanged("));
         Assert.That(source, Does.Contain("public static bool IsAttackMelee("));
         Assert.That(source, Does.Contain("public static bool IsAttackAll("));
+        Assert.That(source, Does.Contain("public static bool IsAttackNormal(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view)"));
+        Assert.That(source, Does.Contain("return view.PropertySet.HasEnumFlag((int)global::Game.CharacterProperties.Attack, global::Game.AttackType.Normal);"));
         Assert.That(source, Does.Contain("global::Game.AttackType.All"));
         Assert.That(
             result.CompilationErrors,

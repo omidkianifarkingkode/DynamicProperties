@@ -12,21 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4a2d2f5006b284348b6aa22c063a4f8e, type: 3}
   m_Name: Character Data
   m_EditorClassIdentifier: 
-  Properties:
+  properties:
     _items32:
-    - id: 1
-      rawValue: 100
-    - id: 3
-      rawValue: 3
-    - id: 15
-      rawValue: 4
-    - id: 6
+    - id: 14
       rawValue: 0
-    - id: 7
-      rawValue: 0
-    - id: 8
-      rawValue: 0
-    _items64:
-    - id: 5
-      rawValue: 0
-    _structureVersion: 39
+    _items64: []
+    _structureVersion: 1
+    _editorSchemaTypeName: DynamicProperty.Samples.Basic.CharacterProperties, DynamicProperty.Samples.Basic,
+      Version=0.0.0.0, Culture=neutral, PublicKeyToken=null

@@ -12,5 +12,9 @@ namespace DynamicProperty.Samples.Basic
 
         [PropertyType(typeof(bool), true)]
         Meele = 2,
+
+        [PropertyCategory("Basic")]
+        [PropertyType(typeof(int), 100), MinMax(0, 1000)]
+        Health = 3,
     }
 }

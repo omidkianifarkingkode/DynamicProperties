@@ -3,7 +3,6 @@ using DynamicProperty.DataAnnotations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -55,6 +54,10 @@ namespace DynamicProperty.Editor
                 HasWarnings;
         }
 
+        private const string SchemaTypeNameField = "_editorSchemaTypeName";
+
+        private const float VerticalSpacing = 4f;
+
         // ---------- Routing by metadata ----------
         private static bool Is64Type(PropertyMetadata meta)
         {
@@ -78,26 +81,41 @@ namespace DynamicProperty.Editor
         }
 
         // ---------- Height ----------
-        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        public override float GetPropertyHeight(
+    SerializedProperty property,
+    GUIContent label)
         {
-            if (!TryResolveMetadata(out var resolver, out _))
+            float line = EditorGUIUtility.singleLineHeight;
+
+            // Schema selector.
+
+            float height = line + VerticalSpacing;
+
+            if (!TryResolveMetadata(property, out var resolver, out _))
             {
-                return EditorGUIUtility.singleLineHeight * 2f + 8f;
+                // Help box shown under schema selector.
+                return height + line * 2f + 6f;
             }
 
             var (items32, items64) = GetLists(property);
 
             if (items32 == null || items64 == null)
             {
-                return EditorGUIUtility.singleLineHeight * 2f + 8f;
+                return height + line * 2f + 6f;
             }
+
+            //
+            // Property title + Add button.
+            //
+
+            height += line + VerticalSpacing;
 
             BuildRowsUnified(property, resolver, out var rows, out var validation);
 
-            float height = EditorGUIUtility.singleLineHeight + 4f;
-
             if (validation.HasAny)
-                height += EditorGUIUtility.singleLineHeight * 2f + 4f;
+            {
+                height += line * 2f + VerticalSpacing;
+            }
 
             string currentCategory = null;
 
@@ -119,9 +137,28 @@ namespace DynamicProperty.Editor
         // ---------- GUI ----------
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            if (!TryResolveMetadata(out var resolver, out var error))
+            float line = EditorGUIUtility.singleLineHeight;
+
+            float y = position.y;
+
+            // Schema
+            var schemaRect = new Rect(position.x, y, position.width, line);
+
+            DrawSchemaSelector(schemaRect, property);
+
+            y += line + VerticalSpacing;
+
+            // Resolve schema after drawing the selector.
+
+            if (!TryResolveMetadata(property, out var resolver, out var error))
             {
-                EditorGUI.HelpBox(position, error, MessageType.Error);
+                var schemaProperty = property.FindPropertyRelative(SchemaTypeNameField);
+
+                bool hasSelection = schemaProperty != null && !string.IsNullOrWhiteSpace(schemaProperty.stringValue);
+
+                var helpRect = new Rect(position.x, y, position.width, line * 2f);
+
+                EditorGUI.HelpBox(helpRect, error, hasSelection ? MessageType.Error : MessageType.Info);
 
                 return;
             }
@@ -130,27 +167,28 @@ namespace DynamicProperty.Editor
 
             if (items32 == null || items64 == null)
             {
-                EditorGUI.HelpBox(
-                    position,
-                    "PropertySet internal lists were not found.",
-                    MessageType.Error);
+                var helpRect = new Rect(position.x, y, position.width, line * 2f);
+
+                EditorGUI.HelpBox(helpRect, "PropertySet internal lists were not found.", MessageType.Error);
 
                 return;
             }
 
-            float y = position.y;
+            // Title + Add
+            var titleRect = new Rect(position.x, y, position.width - 90f, line);
 
-            // Title + single Add
-            var titleRect = new Rect(position.x, y, position.width - 90f, EditorGUIUtility.singleLineHeight);
-            var addRect = new Rect(position.x + position.width - 90f, y, 90f, EditorGUIUtility.singleLineHeight);
+            var addRect = new Rect(position.x + position.width - 90f, y, 90f, line);
+
             EditorGUI.LabelField(titleRect, ObjectNames.NicifyVariableName(property.displayName), EditorStyles.boldLabel);
+
             if (GUI.Button(addRect, "+ Add", EditorStyles.miniButton))
             {
                 ShowAddPicker(addRect, property, items32, items64, resolver);
             }
-            y += titleRect.height + 4f;
 
-            // Rows
+            y += line + VerticalSpacing;
+
+            // Existing code continues from here.
             BuildRowsUnified(property, resolver, out var rows, out var validation);
 
             if (validation.HasAny)
@@ -1144,28 +1182,37 @@ namespace DynamicProperty.Editor
             version.intValue++;
         }
 
-        private bool TryResolveMetadata(out IPropertyMetadataResolver resolver, out string error)
+        private static bool TryResolveMetadata(SerializedProperty propertySet, out IPropertyMetadataResolver resolver, out string error)
         {
             resolver = null;
             error = null;
 
-            if (fieldInfo == null)
+            var schemaTypeName = propertySet.FindPropertyRelative(SchemaTypeNameField);
+
+            if (schemaTypeName == null)
             {
-                error = "Unable to resolve PropertySet field information.";
+                error = $"PropertySet is missing serialized field '{SchemaTypeNameField}'.";
 
                 return false;
             }
 
-            var schema = fieldInfo.GetCustomAttribute<PropertySchemaAttribute>(true);
-
-            if (schema == null)
+            if (string.IsNullOrWhiteSpace(schemaTypeName.stringValue))
             {
-                error = "PropertySet requires [PropertySchema(typeof(...))].";
+                error = "No DynamicProperty schema is selected.";
 
                 return false;
             }
 
-            return PropertyMetadataRegistry.TryGetResolver(schema.SchemaType, out resolver, out error);
+            var schemaType = PropertySchemaTypeRegistry.Resolve(schemaTypeName.stringValue);
+
+            if (schemaType == null)
+            {
+                error = "The selected DynamicProperty schema type could not be resolved. Select the schema again.";
+
+                return false;
+            }
+
+            return PropertyMetadataRegistry.TryGetResolver(schemaType, out resolver, out error);
         }
 
         private static (SerializedProperty items32, SerializedProperty items64) GetLists(SerializedProperty property)
@@ -1360,6 +1407,146 @@ namespace DynamicProperty.Editor
                 return false;
 
             return partialGroupNames.Contains(meta.GroupName.Trim());
+        }
+
+        private static void DrawSchemaSelector(Rect rect, SerializedProperty propertySet)
+        {
+            var schemaProperty = propertySet.FindPropertyRelative(SchemaTypeNameField);
+
+            if (schemaProperty == null)
+            {
+                EditorGUI.HelpBox(rect, $"Missing '{SchemaTypeNameField}'.", MessageType.Error);
+
+                return;
+            }
+
+            var currentType = PropertySchemaTypeRegistry.Resolve(schemaProperty.stringValue);
+
+            string displayName;
+
+            if (currentType != null)
+            {
+                displayName = currentType.FullName ?? currentType.Name;
+            }
+            else if (string.IsNullOrWhiteSpace(schemaProperty.stringValue))
+            {
+                displayName = "Select Schema...";
+            }
+            else
+            {
+                displayName = "<Missing Schema>";
+            }
+
+            var buttonRect = EditorGUI.PrefixLabel(rect, new GUIContent("Schema"));
+
+            if (!EditorGUI.DropdownButton(buttonRect, new GUIContent(displayName), FocusType.Keyboard))
+            {
+                return;
+            }
+
+            ShowSchemaMenu(propertySet, currentType);
+        }
+
+        private static void ShowSchemaMenu(SerializedProperty propertySet, Type currentType)
+        {
+            var menu = new GenericMenu();
+
+            var serializedObject = propertySet.serializedObject;
+
+            string propertyPath = propertySet.propertyPath;
+
+            bool noSchemaSelected = currentType == null;
+
+            menu.AddItem(
+                new GUIContent("None"),
+                noSchemaSelected,
+                () => SetSchema(serializedObject, propertyPath, null));
+
+            menu.AddSeparator(string.Empty);
+
+            var schemas = PropertySchemaTypeRegistry.GetAll();
+
+            if (schemas.Count == 0)
+            {
+                menu.AddDisabledItem(new GUIContent("No DynamicProperty schemas found"));
+            }
+            else
+            {
+                foreach (var schemaType in schemas)
+                {
+                    var capturedType = schemaType;
+
+                    string menuName =
+                        capturedType.FullName ??
+                        capturedType.Name;
+
+                    bool selected = currentType == capturedType;
+
+                    menu.AddItem(
+                        new GUIContent(menuName),
+                        selected,
+                        () => SetSchema(serializedObject, propertyPath, capturedType));
+                }
+            }
+
+            menu.ShowAsContext();
+        }
+
+        private static void SetSchema(SerializedObject serializedObject, string propertySetPath, Type schemaType)
+        {
+            if (serializedObject == null || serializedObject.targetObject == null)
+                return;
+
+            serializedObject.Update();
+
+            var propertySet = serializedObject.FindProperty(propertySetPath);
+
+            if (propertySet == null)
+                return;
+
+            var schemaProperty =
+                propertySet.FindPropertyRelative(SchemaTypeNameField);
+
+            if (schemaProperty == null)
+                return;
+
+            string newValue = PropertySchemaTypeRegistry.GetSerializedName(schemaType) ?? string.Empty;
+
+            if (schemaProperty.stringValue == newValue)
+            {
+                return;
+            }
+
+            bool hasStoredData = HasStoredData(propertySet);
+
+            if (hasStoredData)
+            {
+                bool accepted =
+                    EditorUtility.DisplayDialog(
+                        "Change DynamicProperty Schema?",
+                        "This PropertySet already contains stored properties.\n\n" +
+                        "Changing the schema will NOT modify, migrate, or remove " +
+                        "the existing data. Properties that do not exist in the " +
+                        "new schema may appear as unknown entries.",
+                        "Change Schema",
+                        "Cancel");
+
+                if (!accepted)
+                    return;
+            }
+
+            schemaProperty.stringValue = newValue;
+
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        private static bool HasStoredData(SerializedProperty propertySet)
+        {
+            var items32 = propertySet.FindPropertyRelative("_items32");
+
+            var items64 = propertySet.FindPropertyRelative("_items64");
+
+            return (items32 != null && items32.arraySize > 0) || (items64 != null && items64.arraySize > 0);
         }
     }
 }

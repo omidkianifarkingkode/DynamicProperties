@@ -8,6 +8,7 @@ namespace DynamicProperty.SourceGen
     {
         public static void Emit(
             StringBuilder sb,
+            SchemaModel schema,
             PropertyModel property,
             string generatedName,
             string idExpression)
@@ -15,27 +16,36 @@ namespace DynamicProperty.SourceGen
             if (sb == null)
                 throw new ArgumentNullException(nameof(sb));
 
+            if (schema == null)
+                throw new ArgumentNullException(nameof(schema));
+
             if (property == null)
                 throw new ArgumentNullException(nameof(property));
 
             string typeName =
                 GetClrTypeName(property);
 
+            string receiverType =
+                GeneratorTypeUtility.GetPropertySetViewType(schema);
+
             EmitGetter(
                 sb,
                 generatedName,
-                typeName);
+                typeName,
+                receiverType);
 
             EmitTryGet(
                 sb,
                 property,
                 generatedName,
                 typeName,
+                receiverType,
                 idExpression);
 
             EmitHas(
                 sb,
                 generatedName,
+                receiverType,
                 idExpression);
 
             EmitSetter(
@@ -43,31 +53,36 @@ namespace DynamicProperty.SourceGen
                 property,
                 generatedName,
                 typeName,
+                receiverType,
                 idExpression);
 
             EmitRemove(
                 sb,
                 generatedName,
+                receiverType,
                 idExpression);
         }
 
         private static void EmitGetter(
             StringBuilder sb,
             string name,
-            string typeName)
+            string typeName,
+            string receiverType)
         {
             sb.Append("        public static ")
                 .Append(typeName)
                 .Append(' ')
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set)")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view)")
                 .AppendLine();
 
             sb.AppendLine("        {");
 
             sb.Append("            return TryGet")
                 .Append(name)
-                .Append("(set, out var value) ? value : default;")
+                .Append("(view, out var value) ? value : default;")
                 .AppendLine();
 
             sb.AppendLine("        }");
@@ -79,11 +94,14 @@ namespace DynamicProperty.SourceGen
             PropertyModel property,
             string name,
             string typeName,
+            string receiverType,
             string idExpression)
         {
             sb.Append("        public static bool TryGet")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set, out ")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view, out ")
                 .Append(typeName)
                 .Append(" value)")
                 .AppendLine();
@@ -93,43 +111,43 @@ namespace DynamicProperty.SourceGen
             switch (property.Kind)
             {
                 case ValueKind.Int32:
-                    sb.Append("            return set.TryGetInt(")
+                    sb.Append("            return view.PropertySet.TryGetInt(")
                         .Append(idExpression)
                         .AppendLine(", out value);");
                     break;
 
                 case ValueKind.Single:
-                    sb.Append("            return set.TryGetFloat(")
+                    sb.Append("            return view.PropertySet.TryGetFloat(")
                         .Append(idExpression)
                         .AppendLine(", out value);");
                     break;
 
                 case ValueKind.Boolean:
-                    sb.Append("            return set.TryGetBool(")
+                    sb.Append("            return view.PropertySet.TryGetBool(")
                         .Append(idExpression)
                         .AppendLine(", out value);");
                     break;
 
                 case ValueKind.Int64:
-                    sb.Append("            return set.TryGetLong(")
+                    sb.Append("            return view.PropertySet.TryGetLong(")
                         .Append(idExpression)
                         .AppendLine(", out value);");
                     break;
 
                 case ValueKind.Double:
-                    sb.Append("            return set.TryGetDouble(")
+                    sb.Append("            return view.PropertySet.TryGetDouble(")
                         .Append(idExpression)
                         .AppendLine(", out value);");
                     break;
 
                 case ValueKind.DateTime:
-                    sb.Append("            return set.TryGetUtcDateTime(")
+                    sb.Append("            return view.PropertySet.TryGetUtcDateTime(")
                         .Append(idExpression)
                         .AppendLine(", out value);");
                     break;
 
                 case ValueKind.TimeSpan:
-                    sb.Append("            return set.TryGetTimeSpan(")
+                    sb.Append("            return view.PropertySet.TryGetTimeSpan(")
                         .Append(idExpression)
                         .AppendLine(", out value);");
                     break;
@@ -140,7 +158,8 @@ namespace DynamicProperty.SourceGen
                             property.DeclaredType.ToDisplayString(
                                 SymbolDisplayFormat.FullyQualifiedFormat);
 
-                        sb.Append("            return set.TryGetEnum<")
+                        sb.Append(
+                                "            return view.PropertySet.TryGetEnum<")
                             .Append(enumType)
                             .Append(">(")
                             .Append(idExpression)
@@ -161,16 +180,20 @@ namespace DynamicProperty.SourceGen
         private static void EmitHas(
             StringBuilder sb,
             string name,
+            string receiverType,
             string idExpression)
         {
             sb.Append("        public static bool Has")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set)")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view)")
                 .AppendLine();
 
             sb.AppendLine("        {");
 
-            sb.Append("            return set.ContainsAny(")
+            sb.Append(
+                    "            return view.PropertySet.ContainsAny(")
                 .Append(idExpression)
                 .AppendLine(");");
 
@@ -183,11 +206,14 @@ namespace DynamicProperty.SourceGen
             PropertyModel property,
             string name,
             string typeName,
+            string receiverType,
             string idExpression)
         {
             sb.Append("        public static void Set")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set, ")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view, ")
                 .Append(typeName)
                 .Append(" value)")
                 .AppendLine();
@@ -252,7 +278,7 @@ namespace DynamicProperty.SourceGen
                             property.DeclaredType.ToDisplayString(
                                 SymbolDisplayFormat.FullyQualifiedFormat);
 
-                        sb.Append("            set.SetEnum<")
+                        sb.Append("            view.PropertySet.SetEnum<")
                             .Append(enumType)
                             .Append(">(")
                             .Append(idExpression)
@@ -275,7 +301,7 @@ namespace DynamicProperty.SourceGen
             string methodName,
             string idExpression)
         {
-            sb.Append("            set.")
+            sb.Append("            view.PropertySet.")
                 .Append(methodName)
                 .Append('(')
                 .Append(idExpression)
@@ -285,16 +311,20 @@ namespace DynamicProperty.SourceGen
         private static void EmitRemove(
             StringBuilder sb,
             string name,
+            string receiverType,
             string idExpression)
         {
             sb.Append("        public static void Remove")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set)")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view)")
                 .AppendLine();
 
             sb.AppendLine("        {");
 
-            sb.Append("            set.Remove(")
+            sb.Append(
+                    "            view.PropertySet.Remove(")
                 .Append(idExpression)
                 .AppendLine(");");
 

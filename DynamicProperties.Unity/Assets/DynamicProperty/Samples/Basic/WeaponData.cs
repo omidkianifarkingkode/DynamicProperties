@@ -6,13 +6,17 @@ namespace DynamicProperty.Samples.Basic
     [CreateAssetMenu(fileName = "Weapon Data", menuName = "DynamicProperty/Create Sample Weapon Data")]
     public class WeaponData : ScriptableObject
     {
-        [PropertySchema(typeof(WeaponProperties))]
-        [SerializeField] protected PropertySet Properties;
+        [SerializeField] protected PropertySet properties;
 
         [ContextMenu("DynamicProperty/Print Properties")]
         private void PrintProperties()
         {
-            Debug.Log(Properties != null ? Properties.ToString() : "<null>", this);
+            var weapon = properties.For<WeaponProperties>();
+
+            Debug.Log(properties != null ? properties.ToString() : "<null>", this);
+            Debug.Log(weapon.Demage(), this);
+            Debug.Log(weapon.Meele(), this);
+            Debug.Log(weapon.Health(), this);
         }
     }
 }

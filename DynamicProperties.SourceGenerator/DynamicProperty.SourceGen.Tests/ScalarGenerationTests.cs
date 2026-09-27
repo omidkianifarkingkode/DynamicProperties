@@ -79,7 +79,7 @@ namespace Game
         Assert.That(
             source,
             Does.Contain(
-                "TryGetHealth(set, out var value) ? value : default"));
+                "TryGetHealth(view, out var value) ? value : default"));
 
         Assert.That(
             source,
@@ -145,12 +145,12 @@ namespace Game
         AssertCompleteApi(source, "global::System.TimeSpan", "RespawnDelay");
         AssertCompleteApi(source, "global::Game.WeaponType", "Weapon");
 
-        Assert.That(source, Does.Contain("set.TryGetUtcDateTime((int)global::Game.CharacterProperties.SpawnTime, out value);"));
-        Assert.That(source, Does.Contain("set.SetUtcDateTime((int)global::Game.CharacterProperties.SpawnTime, value);"));
-        Assert.That(source, Does.Contain("set.TryGetTimeSpan((int)global::Game.CharacterProperties.RespawnDelay, out value);"));
-        Assert.That(source, Does.Contain("set.TryGetEnum<global::Game.WeaponType>((int)global::Game.CharacterProperties.Weapon, out value);"));
-        Assert.That(source, Does.Contain("set.SetEnum<global::Game.WeaponType>((int)global::Game.CharacterProperties.Weapon, value);"));
-        Assert.That(source, Does.Contain("TryGetWeapon(set, out var value) ? value : default;"));
+        Assert.That(source, Does.Contain("view.PropertySet.TryGetUtcDateTime((int)global::Game.CharacterProperties.SpawnTime, out value);"));
+        Assert.That(source, Does.Contain("view.PropertySet.SetUtcDateTime((int)global::Game.CharacterProperties.SpawnTime, value);"));
+        Assert.That(source, Does.Contain("view.PropertySet.TryGetTimeSpan((int)global::Game.CharacterProperties.RespawnDelay, out value);"));
+        Assert.That(source, Does.Contain("view.PropertySet.TryGetEnum<global::Game.WeaponType>((int)global::Game.CharacterProperties.Weapon, out value);"));
+        Assert.That(source, Does.Contain("view.PropertySet.SetEnum<global::Game.WeaponType>((int)global::Game.CharacterProperties.Weapon, value);"));
+        Assert.That(source, Does.Contain("TryGetWeapon(view, out var value) ? value : default;"));
 
         Assert.That(
             result.CompilationErrors,
@@ -216,26 +216,26 @@ namespace Game
         Assert.That(
             source,
             Does.Contain(
-                $"public static {typeName} {propertyName}("));
+                $"public static {typeName} {propertyName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static bool TryGet{propertyName}("));
+                $"public static bool TryGet{propertyName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view, out {typeName} value)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static bool Has{propertyName}("));
+                $"public static bool Has{propertyName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static void Set{propertyName}("));
+                $"public static void Set{propertyName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view, {typeName} value)"));
 
         Assert.That(
             source,
             Does.Contain(
-                $"public static void Remove{propertyName}("));
+                $"public static void Remove{propertyName}(this global::DynamicProperty.PropertySetView<global::Game.CharacterProperties> view)"));
     }
 }

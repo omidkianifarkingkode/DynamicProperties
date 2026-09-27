@@ -172,6 +172,36 @@ namespace DynamicProperty
             return false;
         }
     }
+
+    public readonly struct PropertySetView<TSchema>
+        where TSchema : struct, Enum
+    {
+        public PropertySet PropertySet { get; }
+
+        internal PropertySetView(
+            PropertySet propertySet)
+        {
+            PropertySet =
+                propertySet ??
+                throw new ArgumentNullException(
+                    nameof(propertySet));
+        }
+    }
+
+    public static class PropertySetViewExtensions
+    {
+        public static PropertySetView<TSchema> For<TSchema>(
+            this PropertySet propertySet)
+            where TSchema : struct, Enum
+        {
+            if (propertySet == null)
+                throw new ArgumentNullException(
+                    nameof(propertySet));
+
+            return new PropertySetView<TSchema>(
+                propertySet);
+        }
+    }
 }
 
 namespace DynamicProperty.DataAnnotations

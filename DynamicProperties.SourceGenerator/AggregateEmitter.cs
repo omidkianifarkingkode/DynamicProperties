@@ -23,55 +23,66 @@ namespace DynamicProperty.SourceGen
             string typeName =
                 GetAggregateTypeName(group.Kind);
 
+            string receiverType =
+                GeneratorTypeUtility.GetPropertySetViewType(schema);
+
             EmitGetter(
                 sb,
                 generatedName,
-                typeName);
+                typeName,
+                receiverType);
 
             EmitTryGet(
                 sb,
                 schema,
                 group,
                 generatedName,
-                typeName);
+                typeName,
+                receiverType);
 
             EmitHas(
                 sb,
                 schema,
                 group,
-                generatedName);
+                generatedName,
+                receiverType);
 
             EmitSetter(
                 sb,
                 schema,
                 group,
                 generatedName,
-                typeName);
+                typeName,
+                receiverType);
 
             EmitRemove(
                 sb,
                 schema,
                 group,
-                generatedName);
+                generatedName,
+                receiverType);
         }
 
         private static void EmitGetter(
             StringBuilder sb,
             string name,
-            string typeName)
+            string typeName,
+            string receiverType)
         {
             sb.Append("        public static ")
                 .Append(typeName)
                 .Append(' ')
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set)")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view)")
                 .AppendLine();
 
             sb.AppendLine("        {");
 
             sb.Append("            return TryGet")
                 .Append(name)
-                .Append("(set, out var value) ? value : default;")
+                .Append("(view, out var value) ? value : default;")
                 .AppendLine();
 
             sb.AppendLine("        }");
@@ -83,11 +94,14 @@ namespace DynamicProperty.SourceGen
             SchemaModel schema,
             GroupModel group,
             string name,
-            string typeName)
+            string typeName,
+            string receiverType)
         {
             sb.Append("        public static bool TryGet")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set, out ")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view, out ")
                 .Append(typeName)
                 .Append(" value)")
                 .AppendLine();
@@ -105,7 +119,7 @@ namespace DynamicProperty.SourceGen
                         ? "            if ("
                         : "                ");
 
-                sb.Append("!set.TryGetFloat(")
+                sb.Append("!view.PropertySet.TryGetFloat(")
                     .Append(id)
                     .Append(", out var c")
                     .Append(i)
@@ -149,11 +163,14 @@ namespace DynamicProperty.SourceGen
             StringBuilder sb,
             SchemaModel schema,
             GroupModel group,
-            string name)
+            string name,
+            string receiverType)
         {
             sb.Append("        public static bool Has")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set)")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view)")
                 .AppendLine();
 
             sb.AppendLine("        {");
@@ -164,7 +181,7 @@ namespace DynamicProperty.SourceGen
                 if (i > 0)
                     sb.Append(" && ");
 
-                sb.Append("set.ContainsAny(")
+                sb.Append("view.PropertySet.ContainsAny(")
                     .Append(
                         GetIdExpression(
                             schema,
@@ -182,11 +199,14 @@ namespace DynamicProperty.SourceGen
             SchemaModel schema,
             GroupModel group,
             string name,
-            string typeName)
+            string typeName,
+            string receiverType)
         {
             sb.Append("        public static void Set")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set, ")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view, ")
                 .Append(typeName)
                 .Append(" value)")
                 .AppendLine();
@@ -198,7 +218,7 @@ namespace DynamicProperty.SourceGen
 
             for (int i = 0; i < group.Components.Count; i++)
             {
-                sb.Append("            set.SetFloat(")
+                sb.Append("            view.PropertySet.SetFloat(")
                     .Append(
                         GetIdExpression(
                             schema,
@@ -216,18 +236,21 @@ namespace DynamicProperty.SourceGen
             StringBuilder sb,
             SchemaModel schema,
             GroupModel group,
-            string name)
+            string name,
+            string receiverType)
         {
             sb.Append("        public static void Remove")
                 .Append(name)
-                .Append("(this DynamicProperty.PropertySet set)")
+                .Append("(this ")
+                .Append(receiverType)
+                .Append(" view)")
                 .AppendLine();
 
             sb.AppendLine("        {");
 
             foreach (var component in group.Components)
             {
-                sb.Append("            set.Remove(")
+                sb.Append("            view.PropertySet.Remove(")
                     .Append(
                         GetIdExpression(
                             schema,

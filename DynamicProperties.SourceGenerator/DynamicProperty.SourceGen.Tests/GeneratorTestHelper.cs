@@ -174,7 +174,6 @@ namespace DynamicProperty
     }
 
     public readonly struct PropertySetView<TSchema>
-        where TSchema : struct, Enum
     {
         public PropertySet PropertySet { get; }
 
@@ -192,7 +191,6 @@ namespace DynamicProperty
     {
         public static PropertySetView<TSchema> For<TSchema>(
             this PropertySet propertySet)
-            where TSchema : struct, Enum
         {
             if (propertySet == null)
                 throw new ArgumentNullException(
@@ -201,6 +199,10 @@ namespace DynamicProperty
             return new PropertySetView<TSchema>(
                 propertySet);
         }
+    }
+
+    public interface IPropertySchema
+    {
     }
 }
 
@@ -218,6 +220,18 @@ namespace DynamicProperty.DataAnnotations
         public PropertyTypeAttribute(
             Type type,
             bool initialValue) { }
+    }
+
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+    public sealed class PropertyAttribute : Attribute
+    {
+        public PropertyAttribute(params int[] ids) { }
+    }
+
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+    public sealed class InitialValueAttribute : Attribute
+    {
+        public InitialValueAttribute(object value) { }
     }
 
     [AttributeUsage(AttributeTargets.Field)]

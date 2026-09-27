@@ -47,6 +47,35 @@ namespace DynamicProperty.SourceGen
                 }
             }
 
+            foreach (var syntax in receiver.InterfaceCandidates)
+            {
+                var semanticModel =
+                    compilation.GetSemanticModel(
+                        syntax.SyntaxTree);
+
+                var interfaceSymbol =
+                    semanticModel.GetDeclaredSymbol(syntax)
+                        as INamedTypeSymbol;
+
+                if (interfaceSymbol == null)
+                    continue;
+
+                if (interfaceSymbol.TypeKind != TypeKind.Interface)
+                    continue;
+
+                if (!IsTypedPropertySchema(
+                        interfaceSymbol,
+                        symbols))
+                {
+                    continue;
+                }
+
+                if (seen.Add(interfaceSymbol))
+                {
+                    result.Add(interfaceSymbol);
+                }
+            }
+
             return result;
         }
 
@@ -61,6 +90,17 @@ namespace DynamicProperty.SourceGen
                     field.ConstantValue != null &&
                     field.HasAttribute(
                         symbols.PropertyTypeAttribute));
+        }
+
+        private static bool IsTypedPropertySchema(
+            INamedTypeSymbol interfaceSymbol,
+            GeneratorSymbols symbols)
+        {
+            return interfaceSymbol
+                .AllInterfaces
+                .Contains(
+                    symbols.PropertySchema,
+                    SymbolEqualityComparer.Default);
         }
     }
 }

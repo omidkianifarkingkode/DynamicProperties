@@ -11,9 +11,26 @@ namespace DynamicProperty.SourceGen
         public List<EnumDeclarationSyntax> Candidates { get; } =
             new List<EnumDeclarationSyntax>();
 
+        public List<InterfaceDeclarationSyntax> InterfaceCandidates { get; } =
+            new List<InterfaceDeclarationSyntax>();
+
         public void OnVisitSyntaxNode(
             SyntaxNode syntaxNode)
         {
+            if (syntaxNode is InterfaceDeclarationSyntax interfaceDeclaration)
+            {
+                if (interfaceDeclaration.BaseList != null ||
+                    interfaceDeclaration.AttributeLists.Count > 0 ||
+                    interfaceDeclaration.Members
+                        .OfType<PropertyDeclarationSyntax>()
+                        .Any(property => property.AttributeLists.Count > 0))
+                {
+                    InterfaceCandidates.Add(interfaceDeclaration);
+                }
+
+                return;
+            }
+
             if (!(syntaxNode is EnumDeclarationSyntax enumDeclaration))
                 return;
 

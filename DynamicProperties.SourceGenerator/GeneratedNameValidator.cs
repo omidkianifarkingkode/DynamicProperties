@@ -11,11 +11,11 @@ namespace DynamicProperty.SourceGen
         {
             public string Description { get; }
 
-            public IFieldSymbol Symbol { get; }
+            public ISymbol Symbol { get; }
 
             public Origin(
                 string description,
-                IFieldSymbol symbol)
+                ISymbol symbol)
             {
                 Description = description;
                 Symbol = symbol;
@@ -42,16 +42,20 @@ namespace DynamicProperty.SourceGen
                 string origin =
                     $"property '{property.Name}'";
 
-                valid &=
-                    AddPropertyMethods(
-                        schema,
-                        property,
-                        baseName,
-                        origin,
-                        names,
-                        reportDiagnostic);
+                if (property.EmitScalarApi)
+                {
+                    valid &=
+                        AddPropertyMethods(
+                            schema,
+                            property,
+                            baseName,
+                            origin,
+                            names,
+                            reportDiagnostic);
+                }
 
-                if (property.Kind == ValueKind.Enum &&
+                if (property.EmitScalarApi &&
+                    property.Kind == ValueKind.Enum &&
                     property.IsFlagsEnum)
                 {
                     valid &=
@@ -73,7 +77,7 @@ namespace DynamicProperty.SourceGen
                 string origin =
                     $"group '{group.Name}'";
 
-                IFieldSymbol symbol =
+                ISymbol symbol =
                     group.Components[0].Symbol;
 
                 valid &=
@@ -223,7 +227,7 @@ namespace DynamicProperty.SourceGen
 
         private static bool AddMethod(
             SchemaModel schema,
-            IFieldSymbol symbol,
+            ISymbol symbol,
             string methodName,
             string description,
             Dictionary<string, Origin> names,

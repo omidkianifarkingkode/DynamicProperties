@@ -25,20 +25,34 @@ namespace DynamicProperty.Editor
 
         public static bool IsSchemaType(Type type)
         {
-            if (type == null || !type.IsEnum)
+            if (type == null)
                 return false;
 
-            // Current DynamicProperty schema contract.
-            if (Enum.GetUnderlyingType(type) != typeof(int))
-                return false;
+            if (type.IsInterface &&
+                typeof(IPropertySchema).IsAssignableFrom(type))
+            {
+                return type
+                    .GetProperties()
+                    .Any(property =>
+                        property.GetCustomAttribute<DynamicProperty.DataAnnotations.PropertyAttribute>() != null);
+            }
 
-            return type
-                .GetFields(
-                    BindingFlags.Public |
-                    BindingFlags.NonPublic |
-                    BindingFlags.Static)
-                .Any(field =>
-                    field.GetCustomAttribute<PropertyTypeAttribute>() != null);
+            if (type.IsEnum)
+            {
+                // Original DynamicProperty schema contract.
+                if (Enum.GetUnderlyingType(type) != typeof(int))
+                    return false;
+
+                return type
+                    .GetFields(
+                        BindingFlags.Public |
+                        BindingFlags.NonPublic |
+                        BindingFlags.Static)
+                    .Any(field =>
+                        field.GetCustomAttribute<PropertyTypeAttribute>() != null);
+            }
+
+            return false;
         }
 
         public static string GetSerializedName(Type type)

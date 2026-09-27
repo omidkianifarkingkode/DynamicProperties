@@ -55,7 +55,7 @@ namespace DynamicProperty.Editor.Extensions
 
                 string label =
                     meta?.DisplayName ??
-                    Enum.GetName(resolver.BoundEnumType, property.Id) ??
+                    resolver.GetName(property.Id) ??
                     $"ID {property.Id}";
 
                 sb.AppendLine("    - " + Format32(property, label, meta));
@@ -80,7 +80,7 @@ namespace DynamicProperty.Editor.Extensions
 
                 string label =
                     meta?.DisplayName ??
-                    Enum.GetName(resolver.BoundEnumType, property.Id) ??
+                    resolver.GetName(property.Id) ??
                     $"ID {property.Id}";
 
                 sb.AppendLine("    - " + Format64(property, label, meta));

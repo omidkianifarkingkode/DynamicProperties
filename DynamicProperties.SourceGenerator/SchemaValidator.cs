@@ -7,6 +7,78 @@ namespace DynamicProperty.SourceGen
 {
     internal static class SchemaValidator
     {
+        public static bool ValidateInterfaceStorage(
+            SchemaModel schema,
+            Action<Diagnostic> reportDiagnostic)
+        {
+            if (schema == null)
+                throw new ArgumentNullException(nameof(schema));
+
+            if (reportDiagnostic == null)
+                throw new ArgumentNullException(nameof(reportDiagnostic));
+
+            if (!schema.IsInterfaceSchema)
+                return true;
+
+            bool valid = true;
+
+            foreach (var property in schema.Properties)
+            {
+                int expected =
+                    GetRequiredIdCount(property.AggregateKind);
+
+                if (property.StorageIds.Count != expected)
+                {
+                    reportDiagnostic(
+                        GeneratorDiagnostics.InvalidPropertyIdCount(
+                            property,
+                            property.StorageIds.Count,
+                            expected));
+
+                    valid = false;
+                }
+
+                foreach (var duplicate in
+                         property.StorageIds
+                             .GroupBy(id => id)
+                             .Where(group => group.Count() > 1)
+                             .Select(group => group.Key))
+                {
+                    reportDiagnostic(
+                        GeneratorDiagnostics.DuplicateIdInsideProperty(
+                            property,
+                            duplicate));
+
+                    valid = false;
+                }
+            }
+
+            var firstById =
+                new Dictionary<int, PropertyModel>();
+
+            foreach (var property in schema.Properties)
+            {
+                foreach (int id in property.StorageIds.Distinct())
+                {
+                    if (firstById.TryGetValue(id, out var first))
+                    {
+                        reportDiagnostic(
+                            GeneratorDiagnostics.DuplicateIdAcrossProperties(
+                                first,
+                                property,
+                                id));
+
+                        valid = false;
+                        continue;
+                    }
+
+                    firstById[id] = property;
+                }
+            }
+
+            return valid;
+        }
+
         public static IReadOnlyList<GroupModel> BuildValidGroups(
             SchemaModel schema,
             Action<Diagnostic> reportDiagnostic)
@@ -78,7 +150,66 @@ namespace DynamicProperty.SourceGen
                     result);
             }
 
+            if (schema.IsInterfaceSchema)
+            {
+                AddInterfaceAggregateGroups(
+                    schema,
+                    result);
+            }
+
             return result;
+        }
+
+        private static void AddInterfaceAggregateGroups(
+            SchemaModel schema,
+            List<GroupModel> result)
+        {
+            foreach (var property in schema.Properties)
+            {
+                if (property.AggregateKind == AggregateKind.None)
+                    continue;
+
+                var components =
+                    GetRequiredComponents(
+                            property.AggregateKind)
+                        .Select((component, index) =>
+                            new PropertyModel(
+                                property.Symbol,
+                                property.Name + component,
+                                property.DeclaredType,
+                                ValueKind.Single,
+                                property.AggregateKind,
+                                isFlagsEnum: false,
+                                hasGroupAttribute: true,
+                                groupName: property.Name,
+                                hasGroupComponentAttribute: true,
+                                groupComponent: component,
+                                idExpression: property.StorageIds[index].ToString(),
+                                storageIds: new[] { property.StorageIds[index] },
+                                emitScalarApi: false))
+                        .ToArray();
+
+                result.Add(
+                    new GroupModel(
+                        property.Name,
+                        property.AggregateKind,
+                        components));
+            }
+        }
+
+        private static int GetRequiredIdCount(
+            AggregateKind aggregateKind)
+        {
+            return aggregateKind == AggregateKind.None
+                ? 1
+                : GetRequiredComponents(aggregateKind).Count;
+        }
+
+        private static IReadOnlyList<GroupComponentKind> GetRequiredComponents(
+            AggregateKind aggregateKind)
+        {
+            return GroupContract.GetRequiredComponents(
+                aggregateKind);
         }
 
         private static void ValidateGroup(

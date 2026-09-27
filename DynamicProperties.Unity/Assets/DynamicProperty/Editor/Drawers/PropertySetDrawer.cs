@@ -893,7 +893,7 @@ namespace DynamicProperty.Editor
             if (meta == null)
                 return DrawInvalidRow(r, propertySet, items32, index, $"Unknown Property (ID {id})", $"Raw: {rawProp.intValue}", MessageType.Warning);
 
-            string label = meta.DisplayName ?? Enum.GetName(resolver.BoundEnumType, id) ?? $"ID {id}";
+            string label = meta.DisplayName ?? resolver.GetName(id) ?? $"ID {id}";
 
             if (Is64Type(meta))
                 return DrawInvalidRow(r, propertySet, items32, index, label, $"Expected 64-bit storage. Raw: {rawProp.intValue}", MessageType.Error);
@@ -986,7 +986,7 @@ namespace DynamicProperty.Editor
 
             string label =
                 meta.DisplayName ??
-                Enum.GetName(resolver.BoundEnumType, id) ??
+                resolver.GetName(id) ??
                 $"ID {id}";
 
             if (!Is64Type(meta))

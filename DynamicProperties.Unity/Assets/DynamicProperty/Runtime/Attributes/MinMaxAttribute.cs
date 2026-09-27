@@ -2,7 +2,7 @@
 
 namespace DynamicProperty.DataAnnotations
 {
-    [AttributeUsage(AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
     public sealed class MinMaxAttribute : Attribute
     {
         public float Min { get; }

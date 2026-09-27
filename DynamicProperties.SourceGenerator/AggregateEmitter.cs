@@ -266,12 +266,7 @@ namespace DynamicProperty.SourceGen
             SchemaModel schema,
             PropertyModel property)
         {
-            return
-                "(int)" +
-                schema.FullyQualifiedName +
-                "." +
-                IdentifierUtility.EscapeIdentifier(
-                    property.Name);
+            return property.IdExpression;
         }
 
         private static string GetAggregateTypeName(

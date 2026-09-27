@@ -2,7 +2,7 @@
 
 namespace DynamicProperty.DataAnnotations
 {
-    [AttributeUsage(AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
     public sealed class StepAttribute : Attribute
     {
         public float Step { get; }

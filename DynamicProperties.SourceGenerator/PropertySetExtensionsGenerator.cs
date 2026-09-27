@@ -47,11 +47,12 @@ namespace DynamicProperty.SourceGen
 
                 foreach (var enumSym in enums)
                 {
-                    if (enumSym.TypeKind != TypeKind.Enum) continue;
-
                     var schema = SchemaParser.Parse(enumSym, symbols, context.ReportDiagnostic);
 
                     if (schema.Properties.Count == 0)
+                        continue;
+
+                    if (!SchemaValidator.ValidateInterfaceStorage(schema, context.ReportDiagnostic))
                         continue;
 
                     var groups = SchemaValidator.BuildValidGroups(schema, context.ReportDiagnostic);
@@ -86,13 +87,12 @@ namespace DynamicProperty.SourceGen
 
                     foreach (var property in schema.Properties)
                     {
+                        if (!property.EmitScalarApi)
+                            continue;
+
                         string generatedPropertyName = IdentifierUtility.ToPascalIdentifier(property.Name);
 
-                        string enumMemberName = IdentifierUtility.EscapeIdentifier(property.Name);
-
-                        string idExpression = $"(int){schema.FullyQualifiedName}.{enumMemberName}";
-
-                        ScalarEmitter.Emit(sb, schema, property, generatedPropertyName, idExpression);
+                        ScalarEmitter.Emit(sb, schema, property, generatedPropertyName, property.IdExpression);
 
                         emittedAny = true;
 
@@ -102,7 +102,7 @@ namespace DynamicProperty.SourceGen
                                 sb,
                                 schema,
                                 property.DeclaredType,
-                                idExpression,
+                                property.IdExpression,
                                 generatedPropertyName);
 
                             emittedAny = true;

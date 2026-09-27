@@ -113,6 +113,31 @@ set.SetSpawnPosition(v3);
 
 This means type-safe, auto-complete-friendly, semantic code — no manual boilerplate.
 
+### Prototype: Typed Interface Schemas
+
+Dynamic Properties also includes a prototype typed C# schema declaration model. It is additive; existing enum schemas remain supported.
+
+```csharp
+using DynamicProperty;
+using DynamicProperty.DataAnnotations;
+using Vector3 = UnityEngine.Vector3;
+
+public interface CharacterSchema : IPropertySchema
+{
+    [Property(1)]
+    [InitialValue(100)]
+    [MinMax(0, 1000)]
+    int Health { get; }
+
+    [Property(6, 7, 8)]
+    Vector3 SpawnPosition { get; }
+}
+```
+
+Typed schemas must be interfaces implementing `IPropertySchema`. Every schema property must declare `[Property(...)]`; missing attributes, unsupported types, invalid aggregate ID counts, and duplicate IDs are reported by the source generator. Aggregate IDs are explicit and ordered: `Vector3` is `x, y, z`, and `Color` is `r, g, b, a`.
+
+In Unity files that import `UnityEngine`, `[Property]` can be ambiguous with `UnityEngine.PropertyAttribute`. Use targeted aliases like `using Vector3 = UnityEngine.Vector3;` or alias the schema attribute if needed.
+
 ## 🚀 Usage Overview
 
 ### 1️⃣ Define your enum

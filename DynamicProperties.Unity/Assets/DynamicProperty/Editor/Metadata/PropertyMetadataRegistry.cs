@@ -18,9 +18,24 @@ namespace DynamicProperty.Editor
                 return false;
             }
 
+            if (schemaType.IsInterface &&
+                typeof(IPropertySchema).IsAssignableFrom(schemaType))
+            {
+                if (Resolvers.TryGetValue(schemaType, out resolver))
+                {
+                    return true;
+                }
+
+                resolver = new ReflectionMetadataResolver(schemaType);
+
+                Resolvers.Add(schemaType, resolver);
+
+                return true;
+            }
+
             if (!schemaType.IsEnum)
             {
-                error = $"Property schema '{schemaType.FullName}' must be an enum.";
+                error = $"Property schema '{schemaType.FullName}' must be an enum or an interface implementing IPropertySchema.";
 
                 return false;
             }

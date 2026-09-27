@@ -19,7 +19,7 @@ namespace DynamicProperty.SourceGen
                 id: "DP1002",
                 title: "Unsupported PropertyType",
                 messageFormat:
-                    "Enum member '{0}' uses unsupported PropertyType '{1}'.",
+                    "Schema member '{0}' uses unsupported property type '{1}'.",
                 category: "DynamicProperty.SourceGen",
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
@@ -124,6 +124,46 @@ namespace DynamicProperty.SourceGen
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor MissingInterfacePropertyAttribute =
+            new DiagnosticDescriptor(
+                id: "DP1301",
+                title: "Missing Property attribute",
+                messageFormat:
+                    "Schema property '{0}' must declare [Property(...)] with explicit storage ID values.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor InvalidInterfacePropertyIdCount =
+            new DiagnosticDescriptor(
+                id: "DP1302",
+                title: "Invalid Property ID count",
+                messageFormat:
+                    "Schema property '{0}' of type '{1}' declares {2} storage ID(s), but requires exactly {3}.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor DuplicateIdsInsideInterfaceProperty =
+            new DiagnosticDescriptor(
+                id: "DP1303",
+                title: "Duplicate Property IDs in property",
+                messageFormat:
+                    "Schema property '{0}' declares storage ID '{1}' more than once.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor DuplicateIdsAcrossInterfaceProperties =
+            new DiagnosticDescriptor(
+                id: "DP1304",
+                title: "Duplicate Property IDs across properties",
+                messageFormat:
+                    "Storage ID '{0}' is used by both schema property '{1}' and schema property '{2}'.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+
         public static Diagnostic MissingType(
             IFieldSymbol field)
         {
@@ -136,14 +176,12 @@ namespace DynamicProperty.SourceGen
         }
 
         public static Diagnostic UnsupportedType(
-            IFieldSymbol field,
+            ISymbol field,
             ITypeSymbol type)
         {
             return Diagnostic.Create(
                 UnsupportedPropertyType,
-                field.Locations.Length > 0
-                    ? field.Locations[0]
-                    : Location.None,
+                GetLocation(field),
                 field.Name,
                 type.ToDisplayString());
         }
@@ -248,15 +286,15 @@ namespace DynamicProperty.SourceGen
                 property.Name);
         }
 
-        private static Location GetLocation(IFieldSymbol field)
+        private static Location GetLocation(ISymbol symbol)
         {
-            return field.Locations.Length > 0
-                ? field.Locations[0]
+            return symbol.Locations.Length > 0
+                ? symbol.Locations[0]
                 : Location.None;
         }
 
         public static Diagnostic MethodCollision(
-            IFieldSymbol symbol,
+            ISymbol symbol,
             string methodName,
             string firstOrigin,
             string secondOrigin,
@@ -269,6 +307,53 @@ namespace DynamicProperty.SourceGen
                 firstOrigin,
                 secondOrigin,
                 schemaName);
+        }
+
+        public static Diagnostic MissingPropertyAttribute(
+            IPropertySymbol property)
+        {
+            return Diagnostic.Create(
+                MissingInterfacePropertyAttribute,
+                GetLocation(property),
+                property.Name);
+        }
+
+        public static Diagnostic InvalidPropertyIdCount(
+            PropertyModel property,
+            int actual,
+            int expected)
+        {
+            return Diagnostic.Create(
+                InvalidInterfacePropertyIdCount,
+                GetLocation(property.Symbol),
+                property.Name,
+                property.DeclaredType.ToDisplayString(),
+                actual,
+                expected);
+        }
+
+        public static Diagnostic DuplicateIdInsideProperty(
+            PropertyModel property,
+            int id)
+        {
+            return Diagnostic.Create(
+                DuplicateIdsInsideInterfaceProperty,
+                GetLocation(property.Symbol),
+                property.Name,
+                id);
+        }
+
+        public static Diagnostic DuplicateIdAcrossProperties(
+            PropertyModel first,
+            PropertyModel second,
+            int id)
+        {
+            return Diagnostic.Create(
+                DuplicateIdsAcrossInterfaceProperties,
+                GetLocation(second.Symbol),
+                id,
+                first.Name,
+                second.Name);
         }
     }
 }

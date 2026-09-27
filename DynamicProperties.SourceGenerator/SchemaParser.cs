@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -21,6 +21,37 @@ namespace DynamicProperty.SourceGen
             if (reportDiagnostic == null)
                 throw new ArgumentNullException(nameof(reportDiagnostic));
 
+            var properties =
+                schemaSymbol.TypeKind == TypeKind.Interface
+                    ? ParseInterface(schemaSymbol, symbols, reportDiagnostic)
+                    : ParseEnum(schemaSymbol, symbols, reportDiagnostic);
+
+            string namespaceName =
+                schemaSymbol.ContainingNamespace == null ||
+                schemaSymbol.ContainingNamespace.IsGlobalNamespace
+                    ? null
+                    : schemaSymbol
+                        .ContainingNamespace
+                        .ToDisplayString();
+
+            string fullyQualifiedName =
+                schemaSymbol.ToDisplayString(
+                    SymbolDisplayFormat.FullyQualifiedFormat);
+
+            return new SchemaModel(
+                schemaSymbol.TypeKind == TypeKind.Interface,
+                schemaSymbol,
+                schemaSymbol.Name,
+                namespaceName,
+                fullyQualifiedName,
+                properties);
+        }
+
+        private static IReadOnlyList<PropertyModel> ParseEnum(
+            INamedTypeSymbol schemaSymbol,
+            GeneratorSymbols symbols,
+            Action<Diagnostic> reportDiagnostic)
+        {
             var properties =
                 new List<PropertyModel>();
 
@@ -86,6 +117,14 @@ namespace DynamicProperty.SourceGen
                     out bool hasGroupComponentAttribute,
                     out GroupComponentKind? groupComponent);
 
+                string idExpression =
+                    "(int)" +
+                    schemaSymbol.ToDisplayString(
+                        SymbolDisplayFormat.FullyQualifiedFormat) +
+                    "." +
+                    IdentifierUtility.EscapeIdentifier(
+                        field.Name);
+
                 properties.Add(
                     new PropertyModel(
                         field,
@@ -97,27 +136,110 @@ namespace DynamicProperty.SourceGen
                         hasGroupAttribute,
                         groupName,
                         hasGroupComponentAttribute,
-                        groupComponent));
+                        groupComponent,
+                        idExpression,
+                        Array.Empty<int>(),
+                        emitScalarApi: true));
             }
 
-            string namespaceName =
-                schemaSymbol.ContainingNamespace == null ||
-                schemaSymbol.ContainingNamespace.IsGlobalNamespace
-                    ? null
-                    : schemaSymbol
-                        .ContainingNamespace
-                        .ToDisplayString();
+            return properties;
+        }
 
-            string fullyQualifiedName =
-                schemaSymbol.ToDisplayString(
-                    SymbolDisplayFormat.FullyQualifiedFormat);
+        private static IReadOnlyList<PropertyModel> ParseInterface(
+            INamedTypeSymbol schemaSymbol,
+            GeneratorSymbols symbols,
+            Action<Diagnostic> reportDiagnostic)
+        {
+            var properties =
+                new List<PropertyModel>();
 
-            return new SchemaModel(
-                schemaSymbol,
-                schemaSymbol.Name,
-                namespaceName,
-                fullyQualifiedName,
-                properties);
+            foreach (var property in
+                     schemaSymbol
+                         .GetMembers()
+                         .OfType<IPropertySymbol>())
+            {
+                if (property.IsStatic)
+                    continue;
+
+                var propertyAttribute =
+                    property.GetAttribute(
+                        symbols.PropertyAttribute);
+
+                if (propertyAttribute == null)
+                {
+                    reportDiagnostic(
+                        GeneratorDiagnostics.MissingPropertyAttribute(
+                            property));
+
+                    continue;
+                }
+
+                var declaredType =
+                    property.Type;
+
+                var kind =
+                    Classify(declaredType);
+
+                if (kind == ValueKind.Unknown)
+                {
+                    reportDiagnostic(
+                        GeneratorDiagnostics.UnsupportedType(
+                            property,
+                            declaredType));
+
+                    continue;
+                }
+
+                var ids =
+                    GetPropertyIds(
+                        propertyAttribute);
+
+                var aggregateKind =
+                    GetAggregateKind(
+                        declaredType);
+
+                bool isFlagsEnum =
+                    IsFlagsEnum(
+                        declaredType,
+                        symbols.FlagsAttribute);
+
+                properties.Add(
+                    new PropertyModel(
+                        property,
+                        property.Name,
+                        declaredType,
+                        kind,
+                        aggregateKind,
+                        isFlagsEnum,
+                        hasGroupAttribute: false,
+                        groupName: null,
+                        hasGroupComponentAttribute: false,
+                        groupComponent: null,
+                        idExpression: ids.Count == 0 ? "0" : ids[0].ToString(),
+                        storageIds: ids,
+                        emitScalarApi: aggregateKind == AggregateKind.None));
+            }
+
+            return properties;
+        }
+
+        private static IReadOnlyList<int> GetPropertyIds(
+            AttributeData propertyAttribute)
+        {
+            if (propertyAttribute.ConstructorArguments.Length == 0)
+                return Array.Empty<int>();
+
+            var argument =
+                propertyAttribute.ConstructorArguments[0];
+
+            if (argument.Kind != TypedConstantKind.Array)
+                return Array.Empty<int>();
+
+            return argument
+                .Values
+                .Where(value => value.Value is int)
+                .Select(value => (int)value.Value)
+                .ToArray();
         }
 
         private static ITypeSymbol GetDeclaredType(

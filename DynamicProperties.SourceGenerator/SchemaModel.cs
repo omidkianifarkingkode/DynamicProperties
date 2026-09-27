@@ -40,6 +40,8 @@ namespace DynamicProperty.SourceGen
 
     internal sealed class SchemaModel
     {
+        public bool IsInterfaceSchema { get; }
+
         public INamedTypeSymbol Symbol { get; }
 
         public string Name { get; }
@@ -51,12 +53,14 @@ namespace DynamicProperty.SourceGen
         public IReadOnlyList<PropertyModel> Properties { get; }
 
         public SchemaModel(
+            bool isInterfaceSchema,
             INamedTypeSymbol symbol,
             string name,
             string @namespace,
             string fullyQualifiedName,
             IReadOnlyList<PropertyModel> properties)
         {
+            IsInterfaceSchema = isInterfaceSchema;
             Symbol = symbol;
             Name = name;
             Namespace = @namespace;
@@ -67,7 +71,7 @@ namespace DynamicProperty.SourceGen
 
     internal sealed class PropertyModel
     {
-        public IFieldSymbol Symbol { get; }
+        public ISymbol Symbol { get; }
 
         public string Name { get; }
 
@@ -87,8 +91,14 @@ namespace DynamicProperty.SourceGen
 
         public GroupComponentKind? GroupComponent { get; }
 
+        public string IdExpression { get; }
+
+        public IReadOnlyList<int> StorageIds { get; }
+
+        public bool EmitScalarApi { get; }
+
         public PropertyModel(
-            IFieldSymbol symbol,
+            ISymbol symbol,
             string name,
             ITypeSymbol declaredType,
             ValueKind kind,
@@ -97,7 +107,10 @@ namespace DynamicProperty.SourceGen
             bool hasGroupAttribute,
             string groupName,
             bool hasGroupComponentAttribute,
-            GroupComponentKind? groupComponent)
+            GroupComponentKind? groupComponent,
+            string idExpression,
+            IReadOnlyList<int> storageIds,
+            bool emitScalarApi)
         {
             Symbol = symbol;
             Name = name;
@@ -109,6 +122,9 @@ namespace DynamicProperty.SourceGen
             GroupName = groupName;
             HasGroupComponentAttribute = hasGroupComponentAttribute;
             GroupComponent = groupComponent;
+            IdExpression = idExpression;
+            StorageIds = storageIds;
+            EmitScalarApi = emitScalarApi;
         }
     }
 }

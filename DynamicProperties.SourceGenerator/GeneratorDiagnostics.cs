@@ -1,115 +1,15 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 
 namespace DynamicProperty.SourceGen
 {
     internal static class GeneratorDiagnostics
     {
-        private static readonly DiagnosticDescriptor MissingPropertyTypeType =
-            new DiagnosticDescriptor(
-                id: "DP1001",
-                title: "PropertyType attribute missing type",
-                messageFormat:
-                    "Enum member '{0}' has [PropertyType(...)] but no typeof(T) argument.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
         private static readonly DiagnosticDescriptor UnsupportedPropertyType =
             new DiagnosticDescriptor(
                 id: "DP1002",
-                title: "Unsupported PropertyType",
+                title: "Unsupported property type",
                 messageFormat:
-                    "Schema member '{0}' uses unsupported property type '{1}'.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor EmptyGroupName =
-            new DiagnosticDescriptor(
-                id: "DP1101",
-                title: "Empty property group name",
-                messageFormat:
-                    "Enum member '{0}' declares [Group] with an empty group name.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor GroupOnNonAggregateProperty =
-            new DiagnosticDescriptor(
-                id: "DP1102",
-                title: "Group used on non-aggregate property",
-                messageFormat:
-                    "Enum member '{0}' belongs to group '{1}', but PropertyType '{2}' is not an aggregate type.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor MissingGroupComponent =
-            new DiagnosticDescriptor(
-                id: "DP1103",
-                title: "Missing GroupComponent",
-                messageFormat:
-                    "Enum member '{0}' belongs to group '{1}' but does not declare [GroupComponent].",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor GroupComponentWithoutGroup =
-            new DiagnosticDescriptor(
-                id: "DP1104",
-                title: "GroupComponent used without Group",
-                messageFormat:
-                    "Enum member '{0}' declares [GroupComponent] but does not belong to a [Group].",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor InvalidGroupComponent =
-            new DiagnosticDescriptor(
-                id: "DP1105",
-                title: "Invalid group component",
-                messageFormat:
-                    "Component '{0}' is not valid for {1} group '{2}'. Expected components: {3}.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor DuplicateGroupComponent =
-            new DiagnosticDescriptor(
-                id: "DP1106",
-                title: "Duplicate group component",
-                messageFormat:
-                    "Group '{0}' defines component '{1}' more than once.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor MissingRequiredGroupComponent =
-            new DiagnosticDescriptor(
-                id: "DP1107",
-                title: "Missing required group component",
-                messageFormat:
-                    "Group '{0}' of type {1} is missing required component '{2}'.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor MixedGroupTypes =
-            new DiagnosticDescriptor(
-                id: "DP1108",
-                title: "Mixed aggregate types in group",
-                messageFormat:
-                    "Group '{0}' contains mixed aggregate types: {1}.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor InvalidGroupComponentValue =
-            new DiagnosticDescriptor(
-                id: "DP1109",
-                title: "Invalid GroupComponent value",
-                messageFormat:
-                    "Enum member '{0}' declares an invalid GroupComponent value.",
+                    "Schema property '{0}' uses unsupported property type '{1}'.",
                 category: "DynamicProperty.SourceGen",
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
@@ -124,173 +24,85 @@ namespace DynamicProperty.SourceGen
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
 
-        private static readonly DiagnosticDescriptor MissingInterfacePropertyAttribute =
+        private static readonly DiagnosticDescriptor MissingPropertyAttributeDescriptor =
             new DiagnosticDescriptor(
                 id: "DP1301",
                 title: "Missing Property attribute",
                 messageFormat:
-                    "Schema property '{0}' must declare [Property(...)] with explicit storage ID values.",
+                    "Schema property '{0}' must declare [Property(id)].",
                 category: "DynamicProperty.SourceGen",
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
 
-        private static readonly DiagnosticDescriptor InvalidInterfacePropertyIdCount =
+        private static readonly DiagnosticDescriptor InvalidLogicalIdDescriptor =
             new DiagnosticDescriptor(
                 id: "DP1302",
-                title: "Invalid Property ID count",
+                title: "Invalid Property ID",
                 messageFormat:
-                    "Schema property '{0}' of type '{1}' declares {2} storage ID(s), but requires exactly {3}.",
+                    "Schema property '{0}' declares invalid logical property ID '{1}'. IDs must be between 1 and {2}.",
                 category: "DynamicProperty.SourceGen",
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
 
-        private static readonly DiagnosticDescriptor DuplicateIdsInsideInterfaceProperty =
-            new DiagnosticDescriptor(
-                id: "DP1303",
-                title: "Duplicate Property IDs in property",
-                messageFormat:
-                    "Schema property '{0}' declares storage ID '{1}' more than once.",
-                category: "DynamicProperty.SourceGen",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-        private static readonly DiagnosticDescriptor DuplicateIdsAcrossInterfaceProperties =
+        private static readonly DiagnosticDescriptor DuplicateLogicalIdDescriptor =
             new DiagnosticDescriptor(
                 id: "DP1304",
-                title: "Duplicate Property IDs across properties",
+                title: "Duplicate Property ID",
                 messageFormat:
-                    "Storage ID '{0}' is used by both schema property '{1}' and schema property '{2}'.",
+                    "Logical property ID '{0}' is used by both schema property '{1}' and schema property '{2}'.",
                 category: "DynamicProperty.SourceGen",
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
 
-        public static Diagnostic MissingType(
-            IFieldSymbol field)
-        {
-            return Diagnostic.Create(
-                MissingPropertyTypeType,
-                field.Locations.Length > 0
-                    ? field.Locations[0]
-                    : Location.None,
-                field.Name);
-        }
+        private static readonly DiagnosticDescriptor IndexerPropertyDescriptor =
+            new DiagnosticDescriptor(
+                id: "DP1305",
+                title: "Indexer schema property",
+                messageFormat:
+                    "Schema property '{0}' is an indexer. DynamicProperty schemas only support normal instance properties.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor StaticPropertyDescriptor =
+            new DiagnosticDescriptor(
+                id: "DP1306",
+                title: "Static schema property",
+                messageFormat:
+                    "Schema property '{0}' is static. DynamicProperty schemas only support normal instance properties.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor SetterPropertyDescriptor =
+            new DiagnosticDescriptor(
+                id: "DP1307",
+                title: "Schema property has setter",
+                messageFormat:
+                    "Schema property '{0}' declares a setter. DynamicProperty schema properties must be getter-only.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor SchemaInheritanceDescriptor =
+            new DiagnosticDescriptor(
+                id: "DP1308",
+                title: "Schema inheritance is not supported",
+                messageFormat:
+                    "Schema interface '{0}' inherits '{1}'. DynamicProperty schema composition is not supported in this version.",
+                category: "DynamicProperty.SourceGen",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
 
         public static Diagnostic UnsupportedType(
-            ISymbol field,
+            ISymbol symbol,
             ITypeSymbol type)
         {
             return Diagnostic.Create(
                 UnsupportedPropertyType,
-                GetLocation(field),
-                field.Name,
+                GetLocation(symbol),
+                symbol.Name,
                 type.ToDisplayString());
-        }
-
-        public static Diagnostic EmptyGroup(
-            PropertyModel property)
-                {
-                    return Diagnostic.Create(
-                        EmptyGroupName,
-                        GetLocation(property.Symbol),
-                        property.Name);
-                }
-
-        public static Diagnostic NonAggregateGroupMember(
-            PropertyModel property)
-        {
-            return Diagnostic.Create(
-                GroupOnNonAggregateProperty,
-                GetLocation(property.Symbol),
-                property.Name,
-                property.GroupName,
-                property.DeclaredType.ToDisplayString());
-        }
-
-        public static Diagnostic MissingComponent(
-            PropertyModel property)
-        {
-            return Diagnostic.Create(
-                MissingGroupComponent,
-                GetLocation(property.Symbol),
-                property.Name,
-                property.GroupName);
-        }
-
-        public static Diagnostic ComponentWithoutGroup(
-            PropertyModel property)
-        {
-            return Diagnostic.Create(
-                GroupComponentWithoutGroup,
-                GetLocation(property.Symbol),
-                property.Name);
-        }
-
-        public static Diagnostic InvalidComponent(
-            PropertyModel property,
-            AggregateKind kind,
-            string expected)
-        {
-            return Diagnostic.Create(
-                InvalidGroupComponent,
-                GetLocation(property.Symbol),
-                property.GroupComponent,
-                kind,
-                property.GroupName,
-                expected);
-        }
-
-        public static Diagnostic DuplicateComponent(
-            PropertyModel property,
-            string groupName,
-            GroupComponentKind component)
-        {
-            return Diagnostic.Create(
-                DuplicateGroupComponent,
-                GetLocation(property.Symbol),
-                groupName,
-                component);
-        }
-
-        public static Diagnostic MissingRequiredComponent(
-            PropertyModel property,
-            string groupName,
-            AggregateKind kind,
-            GroupComponentKind component)
-        {
-            return Diagnostic.Create(
-                MissingRequiredGroupComponent,
-                GetLocation(property.Symbol),
-                groupName,
-                kind,
-                component);
-        }
-
-        public static Diagnostic MixedTypes(
-            PropertyModel property,
-            string groupName,
-            string kinds)
-        {
-            return Diagnostic.Create(
-                MixedGroupTypes,
-                GetLocation(property.Symbol),
-                groupName,
-                kinds);
-        }
-
-        public static Diagnostic InvalidComponentValue(
-            PropertyModel property)
-        {
-            return Diagnostic.Create(
-                InvalidGroupComponentValue,
-                GetLocation(property.Symbol),
-                property.Name);
-        }
-
-        private static Location GetLocation(ISymbol symbol)
-        {
-            return symbol.Locations.Length > 0
-                ? symbol.Locations[0]
-                : Location.None;
         }
 
         public static Diagnostic MethodCollision(
@@ -313,47 +125,78 @@ namespace DynamicProperty.SourceGen
             IPropertySymbol property)
         {
             return Diagnostic.Create(
-                MissingInterfacePropertyAttribute,
+                MissingPropertyAttributeDescriptor,
                 GetLocation(property),
                 property.Name);
         }
 
-        public static Diagnostic InvalidPropertyIdCount(
+        public static Diagnostic InvalidLogicalId(
             PropertyModel property,
-            int actual,
-            int expected)
+            int maxLogicalId)
         {
             return Diagnostic.Create(
-                InvalidInterfacePropertyIdCount,
+                InvalidLogicalIdDescriptor,
                 GetLocation(property.Symbol),
                 property.Name,
-                property.DeclaredType.ToDisplayString(),
-                actual,
-                expected);
+                property.LogicalId,
+                maxLogicalId);
         }
 
-        public static Diagnostic DuplicateIdInsideProperty(
-            PropertyModel property,
-            int id)
-        {
-            return Diagnostic.Create(
-                DuplicateIdsInsideInterfaceProperty,
-                GetLocation(property.Symbol),
-                property.Name,
-                id);
-        }
-
-        public static Diagnostic DuplicateIdAcrossProperties(
+        public static Diagnostic DuplicateLogicalId(
             PropertyModel first,
-            PropertyModel second,
-            int id)
+            PropertyModel second)
         {
             return Diagnostic.Create(
-                DuplicateIdsAcrossInterfaceProperties,
+                DuplicateLogicalIdDescriptor,
                 GetLocation(second.Symbol),
-                id,
+                second.LogicalId,
                 first.Name,
                 second.Name);
+        }
+
+        public static Diagnostic IndexerProperty(
+            IPropertySymbol property)
+        {
+            return Diagnostic.Create(
+                IndexerPropertyDescriptor,
+                GetLocation(property),
+                property.Name);
+        }
+
+        public static Diagnostic StaticProperty(
+            IPropertySymbol property)
+        {
+            return Diagnostic.Create(
+                StaticPropertyDescriptor,
+                GetLocation(property),
+                property.Name);
+        }
+
+        public static Diagnostic SetterProperty(
+            IPropertySymbol property)
+        {
+            return Diagnostic.Create(
+                SetterPropertyDescriptor,
+                GetLocation(property),
+                property.Name);
+        }
+
+        public static Diagnostic SchemaInheritance(
+            INamedTypeSymbol schema,
+            INamedTypeSymbol inherited)
+        {
+            return Diagnostic.Create(
+                SchemaInheritanceDescriptor,
+                GetLocation(schema),
+                schema.ToDisplayString(),
+                inherited.ToDisplayString());
+        }
+
+        private static Location GetLocation(ISymbol symbol)
+        {
+            return symbol.Locations.Length > 0
+                ? symbol.Locations[0]
+                : Location.None;
         }
     }
 }

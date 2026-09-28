@@ -51,11 +51,11 @@ namespace DynamicProperty.Editor.Extensions
 
             foreach (var property in list)
             {
-                var meta = resolver.Get(property.Id);
+                var meta = resolver.GetByStorageId(property.Id);
 
                 string label =
                     meta?.DisplayName ??
-                    resolver.GetName(property.Id) ??
+                    resolver.GetNameByStorageId(property.Id) ??
                     $"ID {property.Id}";
 
                 sb.AppendLine("    - " + Format32(property, label, meta));
@@ -76,11 +76,11 @@ namespace DynamicProperty.Editor.Extensions
 
             foreach (var property in list)
             {
-                var meta = resolver.Get(property.Id);
+                var meta = resolver.GetByStorageId(property.Id);
 
                 string label =
                     meta?.DisplayName ??
-                    resolver.GetName(property.Id) ??
+                    resolver.GetNameByStorageId(property.Id) ??
                     $"ID {property.Id}";
 
                 sb.AppendLine("    - " + Format64(property, label, meta));

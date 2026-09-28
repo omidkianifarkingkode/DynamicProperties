@@ -204,28 +204,37 @@ namespace DynamicProperty
     public interface IPropertySchema
     {
     }
+
+    public static class PropertyStorageId
+    {
+        public const int SlotBits = 3;
+        public const int MaxSlot = 7;
+        public const int MaxLogicalId = int.MaxValue >> SlotBits;
+
+        public static int Encode(int logicalId, int slot)
+        {
+            if (logicalId <= 0 || logicalId > MaxLogicalId)
+                throw new ArgumentOutOfRangeException(nameof(logicalId));
+
+            if (slot < 0 || slot > MaxSlot)
+                throw new ArgumentOutOfRangeException(nameof(slot));
+
+            return (logicalId << SlotBits) | slot;
+        }
+    }
 }
 
 namespace DynamicProperty.DataAnnotations
 {
-    [AttributeUsage(AttributeTargets.Field)]
-    public sealed class PropertyTypeAttribute : Attribute
-    {
-        public PropertyTypeAttribute(Type type) { }
-
-        public PropertyTypeAttribute(
-            Type type,
-            int initialValue) { }
-
-        public PropertyTypeAttribute(
-            Type type,
-            bool initialValue) { }
-    }
-
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
     public sealed class PropertyAttribute : Attribute
     {
-        public PropertyAttribute(params int[] ids) { }
+        public int Id { get; }
+
+        public PropertyAttribute(int id)
+        {
+            Id = id;
+        }
     }
 
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
@@ -234,31 +243,6 @@ namespace DynamicProperty.DataAnnotations
         public InitialValueAttribute(object value) { }
     }
 
-    [AttributeUsage(AttributeTargets.Field)]
-    public sealed class GroupAttribute : Attribute
-    {
-        public GroupAttribute(string name) { }
-    }
-
-    public enum PropertyComponent
-    {
-        X,
-        Y,
-        Z,
-        W,
-        R,
-        G,
-        B,
-        A
-    }
-
-    [AttributeUsage(AttributeTargets.Field)]
-    public sealed class GroupComponentAttribute
-        : Attribute
-    {
-        public GroupComponentAttribute(
-            PropertyComponent component) { }
-    }
 }
 
 namespace UnityEngine

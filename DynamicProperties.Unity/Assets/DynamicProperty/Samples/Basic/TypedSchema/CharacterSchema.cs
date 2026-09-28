@@ -33,15 +33,15 @@ namespace DynamicProperty.Samples.TypedSchema
         [PropertyCategory("Spawn")]
         TimeSpan RespawnDelay { get; }
 
-        [Property(6, 7, 8)]
+        [Property(6)]
         [PropertyCategory("Spawn")]
         Vector3 SpawnPosition { get; }
 
-        [Property(10, 11, 12, 13)]
+        [Property(7)]
         [PropertyCategory("Spawn")]
         Color BodyColor { get; }
 
-        [Property(14)]
+        [Property(8)]
         [PropertyCategory("Ability")]
         AttackType AttackType { get; }
     }

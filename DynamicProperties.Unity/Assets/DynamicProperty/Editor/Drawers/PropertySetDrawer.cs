@@ -13,14 +13,14 @@ namespace DynamicProperty.Editor
     {
         private enum Backing { Bit32, Bit64 }
 
-        private enum RowState { Normal, Unknown, WrongStorage, InvalidGroup, PartialGroup }
+        private enum RowState { Normal, Unknown, WrongStorage, PartialAggregate }
 
         private struct Row
         {
             public Backing Bin;            // which internal list this row belongs to
-            public bool IsGroup;           // grouped 32-bit float row (Vector/Color)
-            public PropertyGroupKind Kind; // None / Vector2 / Vector3 / Color
-            public string Label;           // group label or single display name
+            public bool IsGroup;           // aggregate 32-bit float row (Vector/Color)
+            public PropertyAggregateKind Kind; // None / Vector2 / Vector3 / Color
+            public string Label;           // aggregate label or single display name
             public List<int> Indices;      // indices into the corresponding list (_items32/_items64)
             public bool IsDuplicate;       // highlight duplicate
             public RowState State;
@@ -37,14 +37,12 @@ namespace DynamicProperty.Editor
             public bool HasDuplicates;
             public bool HasUnknownProperties;
             public bool HasWrongStorage;
-            public bool HasInvalidGroups;
-            public bool HasPartialGroups;
+            public bool HasPartialAggregates;
 
             public bool HasErrors =>
                 HasDuplicates ||
                 HasWrongStorage ||
-                HasInvalidGroups ||
-                HasPartialGroups;
+                HasPartialAggregates;
 
             public bool HasWarnings =>
                 HasUnknownProperties;
@@ -64,6 +62,9 @@ namespace DynamicProperty.Editor
             if (meta == null)
                 return false;
 
+            if (meta.AggregateKind != PropertyAggregateKind.None)
+                return false;
+
             switch (meta.Type)
             {
                 case PropertyValueType.Long:
@@ -78,6 +79,52 @@ namespace DynamicProperty.Editor
                 default:
                     return false;
             }
+        }
+
+        private static int[] GetStorageIds(PropertyMetadata meta)
+        {
+            int slotCount = GetAggregateSlotCount(meta.AggregateKind);
+            var ids = new int[slotCount];
+
+            for (int slot = 0; slot < slotCount; slot++)
+                ids[slot] = PropertyStorageId.Encode(meta.LogicalId, slot);
+
+            return ids;
+        }
+
+        private static int GetAggregateSlotCount(PropertyAggregateKind kind)
+        {
+            switch (kind)
+            {
+                case PropertyAggregateKind.Vector2:
+                    return 2;
+
+                case PropertyAggregateKind.Vector3:
+                    return 3;
+
+                case PropertyAggregateKind.Vector4:
+                case PropertyAggregateKind.Color:
+                    return 4;
+
+                default:
+                    return 1;
+            }
+        }
+
+        private static int FindIndexById(SerializedProperty items, int id)
+        {
+            for (int i = 0; i < items.arraySize; i++)
+            {
+                int itemId =
+                    items.GetArrayElementAtIndex(i)
+                        .FindPropertyRelative("id")
+                        .intValue;
+
+                if (itemId == id)
+                    return i;
+            }
+
+            return -1;
         }
 
         // ---------- Height ----------
@@ -220,8 +267,7 @@ namespace DynamicProperty.Editor
 
                 if (row.IsDuplicate ||
                     row.State == RowState.WrongStorage ||
-                    row.State == RowState.InvalidGroup ||
-                    row.State == RowState.PartialGroup)
+                    row.State == RowState.PartialAggregate)
                 {
                     EditorGUI.DrawRect(
                         new Rect(r.x, r.y + 1f, r.width, r.height - 2f),
@@ -256,7 +302,7 @@ namespace DynamicProperty.Editor
             }
         }
 
-        // ---------- Build unified rows (group 32-bit float groups; singles: 32 then 64) ----------
+        // ---------- Build unified rows (aggregate 32-bit float rows; singles: 32 then 64) ----------
         private void BuildRowsUnified(
             SerializedProperty property,
             IPropertyMetadataResolver resolver,
@@ -267,14 +313,9 @@ namespace DynamicProperty.Editor
             rows = new List<Row>();
             validation = new ValidationSummary();
 
-            var schemaValues = resolver.GetAllValues();
             var schemaOrder = new Dictionary<int, int>();
-            for (int i = 0; i < schemaValues.Length; i++)
-                schemaOrder[schemaValues[i]] = i;
-
-            var groupDefinitions = PropertyGroupValidator.Build(resolver);
-
-            validation.HasInvalidGroups = groupDefinitions.Values.Any(definition => !definition.IsValid);
+            for (int i = 0; i < resolver.Properties.Count; i++)
+                schemaOrder[resolver.Properties[i].LogicalId] = i;
 
             bool dup32 = HasDuplicates(items32, out var map32);
             bool dup64 = HasDuplicates(items64, out var map64);
@@ -283,170 +324,87 @@ namespace DynamicProperty.Editor
             bool cross = ids32.Overlaps(ids64);
             validation.HasDuplicates = dup32 || dup64 || cross;
 
-            var partialGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var definition in groupDefinitions.Values)
-            {
-                if (!definition.IsValid)
-                    continue;
-
-                int presentCount = definition.MemberIds.Count(id => ids32.Contains(id) || ids64.Contains(id));
-
-                if (presentCount == 0)
-                {
-                    // Entire group is absent.
-                    // This is a valid sparse state.
-                    continue;
-                }
-
-                if (presentCount == definition.MemberIds.Count)
-                {
-                    // All logical members exist somewhere.
-                    // Wrong-storage validation is handled separately.
-                    continue;
-                }
-
-                partialGroupNames.Add(definition.Name);
-
-                validation.HasPartialGroups = true;
-            }
-
             var consumed32 = new HashSet<int>();
-            var groupBuckets = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+            var consumed64 = new HashSet<int>();
 
-            // 32-bit group buckets (float + group name)
-            for (int i = 0; i < items32.arraySize; i++)
+            foreach (var meta in resolver.Properties)
             {
-                int id = items32.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
-
-                var meta = resolver.Get(id);
-
-                if (meta == null || string.IsNullOrWhiteSpace(meta.GroupName))
+                if (meta.AggregateKind == PropertyAggregateKind.None)
                     continue;
 
-                string groupName = meta.GroupName.Trim();
+                var storageIds = GetStorageIds(meta);
+                int present32 = 0;
+                int present64 = 0;
 
-                if (!groupDefinitions.TryGetValue(groupName, out var definition))
-                    continue;
-
-                // Invalid schema groups must not be interpreted
-                // as aggregates.
-                if (!definition.IsValid)
-                    continue;
-
-                if (!groupBuckets.TryGetValue(groupName, out var list))
+                foreach (int storageId in storageIds)
                 {
-                    list = new List<int>();
-                    groupBuckets[groupName] = list;
+                    if (ids32.Contains(storageId))
+                        present32++;
+
+                    if (ids64.Contains(storageId))
+                        present64++;
                 }
 
-                list.Add(i);
-            }
+                int presentTotal = present32 + present64;
 
-            // Group rows
-            foreach (var kvp in groupBuckets)
-            {
-                var indices = kvp.Value;
-
-                if (indices.Count < 2)
+                if (presentTotal == 0)
                     continue;
 
-                if (!groupDefinitions.TryGetValue(kvp.Key, out var definition))
-                    continue;
+                bool completeIn32 = present32 == storageIds.Length && present64 == 0;
+                bool partialOrWrong = !completeIn32;
 
-                if (!definition.IsValid)
-                    continue;
+                var draw = new List<int>();
 
-                var kind = definition.Kind;
-
-                var indexById = new Dictionary<int, int>();
-
-                foreach (int index in indices)
+                foreach (int storageId in storageIds)
                 {
-                    int id = items32
-                            .GetArrayElementAtIndex(index)
-                            .FindPropertyRelative("id")
-                            .intValue;
+                    int index32 = FindIndexById(items32, storageId);
+                    int index64 = FindIndexById(items64, storageId);
 
-                    // Duplicate handling belongs to the duplicate validator.
-                    // For aggregate mapping we keep the first serialized entry.
-                    if (!indexById.ContainsKey(id))
-                        indexById[id] = index;
-                }
-
-                bool isComplete = definition.MemberIds.All(id => indexById.ContainsKey(id));
-
-                if (!isComplete)
-                {
-                    // Partial groups must not be interpreted
-                    // as aggregate values.
-                    //
-                    // Their members will remain unconsumed
-                    // and will be rendered as single rows below.
-                    continue;
-                }
-
-                var draw = definition.MemberIds
-                        .Select(id => indexById[id])
-                        .ToList();
-
-                foreach (var idx in draw) consumed32.Add(idx);
-
-                bool d = draw.Any(ix =>
-                {
-                    int id = items32.GetArrayElementAtIndex(ix).FindPropertyRelative("id").intValue;
-                    return (map32.TryGetValue(id, out var c) && c > 1) || ids64.Contains(id);
-                });
-
-                string category = null;
-                int? order = null;
-                int groupSchemaOrder = int.MaxValue;
-
-                var orderedGroupItems = draw.Select(index =>
+                    if (index32 >= 0)
                     {
-                        int id = items32.GetArrayElementAtIndex(index).FindPropertyRelative("id").intValue;
+                        draw.Add(index32);
+                        consumed32.Add(index32);
+                    }
 
-                        int orderInSchema = schemaOrder.TryGetValue(id, out var schemaIndex) ? schemaIndex : int.MaxValue;
-
-                        return new
-                        {
-                            Id = id,
-                            Meta = resolver.Get(id),
-                            SchemaOrder = orderInSchema
-                        };
-                    })
-                    .OrderBy(item => item.SchemaOrder)
-                    .ToList();
-
-                foreach (var item in orderedGroupItems)
-                {
-                    groupSchemaOrder = Math.Min(groupSchemaOrder, item.SchemaOrder);
-
-                    if (item.Meta == null)
-                        continue;
-
-                    if (category == null && !string.IsNullOrWhiteSpace(item.Meta.Category))
-                        category = item.Meta.Category;
-
-                    if (!order.HasValue && item.Meta.Order.HasValue)
-                        order = item.Meta.Order;
+                    if (index64 >= 0)
+                    {
+                        consumed64.Add(index64);
+                    }
                 }
 
-                category = NormalizeCategory(category);
+                bool duplicate = storageIds.Any(id =>
+                    (map32.TryGetValue(id, out var count32) && count32 > 1) ||
+                    (map64.TryGetValue(id, out var count64) && count64 > 1) ||
+                    (ids32.Contains(id) && ids64.Contains(id)));
+
+                var rowState =
+                    completeIn32
+                        ? RowState.Normal
+                        : present64 > 0
+                            ? RowState.WrongStorage
+                            : RowState.PartialAggregate;
+
+                if (rowState == RowState.WrongStorage)
+                    validation.HasWrongStorage = true;
+
+                if (rowState == RowState.PartialAggregate)
+                    validation.HasPartialAggregates = true;
+
+                int itemSchemaOrder = schemaOrder.TryGetValue(meta.LogicalId, out var schemaIndex) ? schemaIndex : int.MaxValue;
 
                 rows.Add(new Row
                 {
                     Bin = Backing.Bit32,
                     IsGroup = true,
-                    Kind = kind,
-                    Label = kvp.Key,
+                    Kind = meta.AggregateKind,
+                    Label = meta.DisplayName ?? meta.Name ?? $"ID {meta.LogicalId}",
                     Indices = draw,
-                    IsDuplicate = d,
+                    IsDuplicate = duplicate,
                     Height = EditorGUIUtility.singleLineHeight,
-                    State = RowState.Normal,
-                    Category = category,
-                    Order = order,
-                    SchemaOrder = groupSchemaOrder
+                    State = rowState,
+                    Category = NormalizeCategory(meta.Category),
+                    Order = meta.Order,
+                    SchemaOrder = itemSchemaOrder
                 });
             }
 
@@ -458,13 +416,16 @@ namespace DynamicProperty.Editor
                 int id = items32.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
                 bool d = (map32.TryGetValue(id, out var c) && c > 1) || ids64.Contains(id);
 
-                var meta = resolver.Get(id);
+                var meta = resolver.GetByStorageId(id);
 
                 string category = NormalizeCategory(meta?.Category);
 
                 int? order = meta?.Order;
 
-                int itemSchemaOrder = schemaOrder.TryGetValue(id, out var schemaIndex) ? schemaIndex : int.MaxValue;
+                int itemSchemaOrder =
+                    meta != null && schemaOrder.TryGetValue(meta.LogicalId, out var schemaIndex)
+                        ? schemaIndex
+                        : int.MaxValue;
 
                 RowState state;
 
@@ -473,18 +434,15 @@ namespace DynamicProperty.Editor
                     state = RowState.Unknown;
                     validation.HasUnknownProperties = true;
                 }
-                else if (IsMemberOfInvalidGroup(meta, groupDefinitions))
-                {
-                    state = RowState.InvalidGroup;
-                }
                 else if (Is64Type(meta))
                 {
                     state = RowState.WrongStorage;
                     validation.HasWrongStorage = true;
                 }
-                else if (IsMemberOfPartialGroup(meta, partialGroupNames))
+                else if (meta.AggregateKind != PropertyAggregateKind.None)
                 {
-                    state = RowState.PartialGroup;
+                    state = RowState.PartialAggregate;
+                    validation.HasPartialAggregates = true;
                 }
                 else
                 {
@@ -495,7 +453,7 @@ namespace DynamicProperty.Editor
                 {
                     Bin = Backing.Bit32,
                     IsGroup = false,
-                    Kind = PropertyGroupKind.None,
+                    Kind = PropertyAggregateKind.None,
                     Label = null,
                     Indices = new List<int> { i },
                     IsDuplicate = d,
@@ -510,16 +468,21 @@ namespace DynamicProperty.Editor
             // 64-bit singles
             for (int i = 0; i < items64.arraySize; i++)
             {
+                if (consumed64.Contains(i)) continue;
+
                 int id = items64.GetArrayElementAtIndex(i).FindPropertyRelative("id").intValue;
                 bool d = (map64.TryGetValue(id, out var c) && c > 1) || ids32.Contains(id);
 
-                var meta = resolver.Get(id);
+                var meta = resolver.GetByStorageId(id);
 
                 string category = NormalizeCategory(meta?.Category);
 
                 int? order = meta?.Order;
 
-                int itemSchemaOrder = schemaOrder.TryGetValue(id, out var schemaIndex) ? schemaIndex : int.MaxValue;
+                int itemSchemaOrder =
+                    meta != null && schemaOrder.TryGetValue(meta.LogicalId, out var schemaIndex)
+                        ? schemaIndex
+                        : int.MaxValue;
 
                 RowState state;
 
@@ -528,18 +491,10 @@ namespace DynamicProperty.Editor
                     state = RowState.Unknown;
                     validation.HasUnknownProperties = true;
                 }
-                else if (IsMemberOfInvalidGroup(meta, groupDefinitions))
-                {
-                    state = RowState.InvalidGroup;
-                }
                 else if (!Is64Type(meta))
                 {
                     state = RowState.WrongStorage;
                     validation.HasWrongStorage = true;
-                }
-                else if (IsMemberOfPartialGroup(meta, partialGroupNames))
-                {
-                    state = RowState.PartialGroup;
                 }
                 else
                 {
@@ -550,7 +505,7 @@ namespace DynamicProperty.Editor
                 {
                     Bin = Backing.Bit64,
                     IsGroup = false,
-                    Kind = PropertyGroupKind.None,
+                    Kind = PropertyAggregateKind.None,
                     Label = null,
                     Indices = new List<int> { i },
                     IsDuplicate = d,
@@ -584,180 +539,63 @@ namespace DynamicProperty.Editor
             var existing = CollectIds(items32);
             existing.UnionWith(CollectIds(items64));
 
-            var names = resolver.GetAllNames();
-            var values = resolver.GetAllValues();
+            var entries = new List<(PropertyMetadata meta, string displayName)>();
 
-            var groupDefinitions = PropertyGroupValidator.Build(resolver);
-
-            var groups32 = new Dictionary<string, (PropertyGroupKind kind, List<(int id, string displayName)> items)>(StringComparer.OrdinalIgnoreCase);
-
-            var singles = new List<(int id, string displayName, PropertyMetadata meta)>();
-
-            for (int i = 0; i < values.Length; i++)
+            foreach (var meta in resolver.Properties)
             {
-                int id = values[i];
-
-                if (existing.Contains(id))
-                    continue;
-
-                var meta = resolver.Get(id);
-
                 if (meta == null)
                     continue;
 
-                if (meta.HiddenInEditor || id == 0)
+                if (meta.HiddenInEditor || meta.LogicalId == 0)
                     continue;
 
-                string displayName = meta.DisplayName ?? names[i];
+                var storageIds = GetStorageIds(meta);
 
-                if (!string.IsNullOrWhiteSpace(meta.GroupName))
-                {
-                    string groupName = meta.GroupName.Trim();
-
-                    if (!groupDefinitions.TryGetValue(groupName, out var definition))
-                        continue;
-
-                    // Invalid groups cannot be added from the picker.
-                    if (!definition.IsValid)
-                        continue;
-
-                    if (!groups32.TryGetValue(groupName, out var group))
-                    {
-                        group = (definition.Kind, new List<(int, string)>());
-                    }
-
-                    group.items.Add((id, displayName));
-
-                    groups32[groupName] = group;
-
+                if (storageIds.Any(existing.Contains))
                     continue;
-                }
 
-                singles.Add((id, displayName, meta));
+                entries.Add((meta, meta.DisplayName ?? meta.Name ?? $"ID {meta.LogicalId}"));
             }
 
             var pickerItems = new List<PropertyPickerPopup.Item>();
 
-            AddGroupPickerItems(pickerItems, groups32, groupDefinitions, propertySet, items32, resolver);
-
-            AddSinglePickerItems(pickerItems, singles, propertySet, items32, items64);
+            AddPickerItems(pickerItems, entries, propertySet, items32, items64);
 
             PopupWindow.Show(activatorRect, new PropertyPickerPopup(pickerItems));
         }
 
-        private void AddGroupPickerItems(
+        private void AddPickerItems(
             List<PropertyPickerPopup.Item> pickerItems,
-            Dictionary<string, (PropertyGroupKind kind, List<(int id, string displayName)> items)> groups,
-            IReadOnlyDictionary<string, PropertyGroupDefinition> definitions,
-            SerializedProperty propertySet,
-            SerializedProperty items32,
-            IPropertyMetadataResolver resolver)
-        {
-            foreach (var kvp in groups)
-            {
-                string groupName = kvp.Key;
-                var group = kvp.Value;
-
-                if (!definitions.TryGetValue(groupName, out var definition))
-                    continue;
-
-                if (!definition.IsValid)
-                    continue;
-
-                string label = groupName;
-
-                switch (group.kind)
-                {
-                    case PropertyGroupKind.Color:
-                        label += " (Color)";
-                        break;
-
-                    case PropertyGroupKind.Vector2:
-                        label += " (Vector2)";
-                        break;
-
-                    case PropertyGroupKind.Vector3:
-                        label += " (Vector3)";
-                        break;
-
-                    case PropertyGroupKind.Vector4:
-                        label += " (Vector4)";
-                        break;
-                }
-
-                var itemsById = group.items.ToDictionary(item => item.id);
-
-                var capturedItems = definition.MemberIds
-                        .Where(itemsById.ContainsKey)
-                        .Select(id => itemsById[id])
-                        .ToArray();
-
-                string searchText = label + " " + string.Join(" ", capturedItems.Select(x => x.displayName));
-
-                string category = null;
-                string tooltip = null;
-                int? order = null;
-
-                foreach (int memberId in definition.MemberIds)
-                {
-                    var meta = resolver.Get(memberId);
-
-                    if (meta == null)
-                        continue;
-
-                    if (category == null && !string.IsNullOrWhiteSpace(meta.Category))
-                        category = meta.Category;
-
-                    if (tooltip == null && !string.IsNullOrWhiteSpace(meta.Tooltip))
-                        tooltip = meta.Tooltip;
-
-                    if (!order.HasValue && meta.Order.HasValue)
-                        order = meta.Order;
-
-                    if (category != null && tooltip != null && order.HasValue)
-                        break;
-                }
-
-                pickerItems.Add(new PropertyPickerPopup.Item(label, searchText, category, order, tooltip, () =>
-                    {
-                        foreach (var item in capturedItems)
-                        {
-                            var meta = resolver.Get(item.id);
-
-                            Add32(items32, item.id, GetInitialRaw32(meta));
-                        }
-
-                        MarkStructureChanged(propertySet);
-
-                        propertySet.serializedObject.ApplyModifiedProperties();
-                    }));
-            }
-        }
-
-        private void AddSinglePickerItems(
-            List<PropertyPickerPopup.Item> pickerItems,
-            List<(int id, string displayName, PropertyMetadata meta)> singles,
+            List<(PropertyMetadata meta, string displayName)> entries,
             SerializedProperty propertySet,
             SerializedProperty items32,
             SerializedProperty items64)
         {
-            foreach (var entry in singles)
+            foreach (var entry in entries)
             {
-                int id = entry.id;
                 string displayName = entry.displayName;
                 PropertyMetadata meta = entry.meta;
 
                 bool is64 = Is64Type(meta);
 
-                string label = displayName;
-
                 pickerItems.Add(
-                    new PropertyPickerPopup.Item(label, displayName, meta.Category, meta.Order, meta.Tooltip, () =>
+                    new PropertyPickerPopup.Item(displayName, displayName, meta.Category, meta.Order, meta.Tooltip, () =>
                         {
-                            if (is64)
-                                Add64(items64, id, GetInitialRaw64(meta));
+                            if (meta.AggregateKind != PropertyAggregateKind.None)
+                            {
+                                var ids = GetStorageIds(meta);
+
+                                foreach (int id in ids)
+                                    Add32(items32, id, GetInitialRaw32(meta));
+                            }
+                            else if (is64)
+                            {
+                                Add64(items64, PropertyStorageId.Encode(meta.LogicalId, 0), GetInitialRaw64(meta));
+                            }
                             else
-                                Add32(items32, id, GetInitialRaw32(meta));
+                            {
+                                Add32(items32, PropertyStorageId.Encode(meta.LogicalId, 0), GetInitialRaw32(meta));
+                            }
 
                             MarkStructureChanged(propertySet);
 
@@ -793,7 +631,7 @@ namespace DynamicProperty.Editor
 
                 int id = element .FindPropertyRelative("id") .intValue;
 
-                var meta = resolver.Get(id);
+                var meta = resolver.GetByStorageId(id);
 
                 if (meta == null || string.IsNullOrWhiteSpace(meta.Tooltip))
                     continue;
@@ -813,7 +651,7 @@ namespace DynamicProperty.Editor
                 vals[i] = new ValueUnion32 { raw = raw }.asFloat;
             }
 
-            if (row.Kind == PropertyGroupKind.Color && comp >= 3)
+            if (row.Kind == PropertyAggregateKind.Color && comp >= 3)
             {
                 var ordered = row.Indices;
 
@@ -888,12 +726,12 @@ namespace DynamicProperty.Editor
             var rawProp = elem.FindPropertyRelative("rawValue");
 
             int id = idProp.intValue;
-            var meta = resolver.Get(id);
+            var meta = resolver.GetByStorageId(id);
 
             if (meta == null)
                 return DrawInvalidRow(r, propertySet, items32, index, $"Unknown Property (ID {id})", $"Raw: {rawProp.intValue}", MessageType.Warning);
 
-            string label = meta.DisplayName ?? resolver.GetName(id) ?? $"ID {id}";
+            string label = meta.DisplayName ?? resolver.GetNameByStorageId(id) ?? $"ID {id}";
 
             if (Is64Type(meta))
                 return DrawInvalidRow(r, propertySet, items32, index, label, $"Expected 64-bit storage. Raw: {rawProp.intValue}", MessageType.Error);
@@ -979,14 +817,14 @@ namespace DynamicProperty.Editor
             var rawProp = elem.FindPropertyRelative("rawValue");
 
             int id = idProp.intValue;
-            var meta = resolver.Get(id);
+            var meta = resolver.GetByStorageId(id);
 
             if (meta == null)
                 return DrawInvalidRow(r, propertySet, items64, index, $"Unknown Property (ID {id})", $"Raw: {rawProp.longValue}", MessageType.Warning);
 
             string label =
                 meta.DisplayName ??
-                resolver.GetName(id) ??
+                resolver.GetNameByStorageId(id) ??
                 $"ID {id}";
 
             if (!Is64Type(meta))
@@ -1337,14 +1175,11 @@ namespace DynamicProperty.Editor
             if (validation.HasWrongStorage)
                 problems.Add("wrong-storage entries");
 
-            if (validation.HasInvalidGroups)
-                problems.Add("invalid group definitions");
-
             if (validation.HasUnknownProperties)
                 problems.Add("unknown properties");
 
-            if (validation.HasPartialGroups)
-                problems.Add("incomplete aggregate groups");
+            if (validation.HasPartialAggregates)
+                problems.Add("incomplete aggregate entries");
 
             return
                 "PropertySet contains " +
@@ -1389,24 +1224,6 @@ namespace DynamicProperty.Editor
             EditorGUI.DrawRect(separatorRect, new Color(0.5f, 0.5f, 0.5f, 0.35f));
 
             return GetCategoryHeaderHeight();
-        }
-
-        private static bool IsMemberOfInvalidGroup(PropertyMetadata meta, IReadOnlyDictionary<string, PropertyGroupDefinition> definitions)
-        {
-            if (meta == null || string.IsNullOrWhiteSpace(meta.GroupName))
-                return false;
-
-            string groupName = meta.GroupName.Trim();
-
-            return definitions.TryGetValue(groupName, out var definition) && !definition.IsValid;
-        }
-
-        private static bool IsMemberOfPartialGroup(PropertyMetadata meta, HashSet<string> partialGroupNames)
-        {
-            if (meta == null || string.IsNullOrWhiteSpace(meta.GroupName))
-                return false;
-
-            return partialGroupNames.Contains(meta.GroupName.Trim());
         }
 
         private static void DrawSchemaSelector(Rect rect, SerializedProperty propertySet)

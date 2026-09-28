@@ -1,12 +1,13 @@
-﻿using System;
-using DynamicProperty.DataAnnotations;
+using System;
 
 namespace DynamicProperty.Editor
 {
-    public enum PropertyGroupKind { None, Vector2, Vector3, Vector4, Color }
+    public enum PropertyAggregateKind { None, Vector2, Vector3, Vector4, Color }
 
     public sealed class PropertyMetadata
     {
+        public int LogicalId;
+        public string Name;
         public PropertyValueType Type;
 
         public string DisplayName;
@@ -25,8 +26,6 @@ namespace DynamicProperty.Editor
 
         public bool HiddenInEditor;
 
-        public string GroupName;
-        public PropertyGroupKind GroupKind;
-        public PropertyComponent? GroupComponent;
+        public PropertyAggregateKind AggregateKind;
     }
 }

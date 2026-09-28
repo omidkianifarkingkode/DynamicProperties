@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text;
 
 namespace DynamicProperty.SourceGen
@@ -8,7 +8,7 @@ namespace DynamicProperty.SourceGen
         public static void Emit(
             StringBuilder sb,
             SchemaModel schema,
-            GroupModel group,
+            PropertyModel property,
             string generatedName)
         {
             if (sb == null)
@@ -17,11 +17,12 @@ namespace DynamicProperty.SourceGen
             if (schema == null)
                 throw new ArgumentNullException(nameof(schema));
 
-            if (group == null)
-                throw new ArgumentNullException(nameof(group));
+            if (property == null)
+                throw new ArgumentNullException(nameof(property));
 
             string typeName =
-                GetAggregateTypeName(group.Kind);
+                AggregateContract.GetAggregateTypeName(
+                    property.AggregateKind);
 
             string receiverType =
                 GeneratorTypeUtility.GetPropertySetViewType(schema);
@@ -34,31 +35,27 @@ namespace DynamicProperty.SourceGen
 
             EmitTryGet(
                 sb,
-                schema,
-                group,
+                property,
                 generatedName,
                 typeName,
                 receiverType);
 
             EmitHas(
                 sb,
-                schema,
-                group,
+                property,
                 generatedName,
                 receiverType);
 
             EmitSetter(
                 sb,
-                schema,
-                group,
+                property,
                 generatedName,
                 typeName,
                 receiverType);
 
             EmitRemove(
                 sb,
-                schema,
-                group,
+                property,
                 generatedName,
                 receiverType);
         }
@@ -91,8 +88,7 @@ namespace DynamicProperty.SourceGen
 
         private static void EmitTryGet(
             StringBuilder sb,
-            SchemaModel schema,
-            GroupModel group,
+            PropertyModel property,
             string name,
             string typeName,
             string receiverType)
@@ -108,31 +104,26 @@ namespace DynamicProperty.SourceGen
 
             sb.AppendLine("        {");
 
-            for (int i = 0; i < group.Components.Count; i++)
-            {
-                string id =
-                    GetIdExpression(
-                        schema,
-                        group.Components[i]);
+            int slots =
+                AggregateContract.GetSlotCount(
+                    property.AggregateKind);
 
+            for (int i = 0; i < slots; i++)
+            {
                 sb.Append(i == 0
                         ? "            if ("
                         : "                ");
 
                 sb.Append("!view.PropertySet.TryGetFloat(")
-                    .Append(id)
+                    .Append(GetStorageIdExpression(property, i))
                     .Append(", out var c")
                     .Append(i)
                     .Append(')');
 
-                if (i < group.Components.Count - 1)
-                {
+                if (i < slots - 1)
                     sb.AppendLine(" ||");
-                }
                 else
-                {
                     sb.AppendLine(")");
-                }
             }
 
             sb.AppendLine("            {");
@@ -145,7 +136,7 @@ namespace DynamicProperty.SourceGen
                 .Append(typeName)
                 .Append('(');
 
-            for (int i = 0; i < group.Components.Count; i++)
+            for (int i = 0; i < slots; i++)
             {
                 if (i > 0)
                     sb.Append(", ");
@@ -161,8 +152,7 @@ namespace DynamicProperty.SourceGen
 
         private static void EmitHas(
             StringBuilder sb,
-            SchemaModel schema,
-            GroupModel group,
+            PropertyModel property,
             string name,
             string receiverType)
         {
@@ -176,16 +166,17 @@ namespace DynamicProperty.SourceGen
             sb.AppendLine("        {");
             sb.Append("            return ");
 
-            for (int i = 0; i < group.Components.Count; i++)
+            int slots =
+                AggregateContract.GetSlotCount(
+                    property.AggregateKind);
+
+            for (int i = 0; i < slots; i++)
             {
                 if (i > 0)
                     sb.Append(" && ");
 
                 sb.Append("view.PropertySet.ContainsAny(")
-                    .Append(
-                        GetIdExpression(
-                            schema,
-                            group.Components[i]))
+                    .Append(GetStorageIdExpression(property, i))
                     .Append(')');
             }
 
@@ -196,8 +187,7 @@ namespace DynamicProperty.SourceGen
 
         private static void EmitSetter(
             StringBuilder sb,
-            SchemaModel schema,
-            GroupModel group,
+            PropertyModel property,
             string name,
             string typeName,
             string receiverType)
@@ -214,15 +204,13 @@ namespace DynamicProperty.SourceGen
             sb.AppendLine("        {");
 
             var componentAccess =
-                GetComponentAccessors(group.Kind);
+                AggregateContract.GetComponentAccessors(
+                    property.AggregateKind);
 
-            for (int i = 0; i < group.Components.Count; i++)
+            for (int i = 0; i < componentAccess.Length; i++)
             {
                 sb.Append("            view.PropertySet.SetFloat(")
-                    .Append(
-                        GetIdExpression(
-                            schema,
-                            group.Components[i]))
+                    .Append(GetStorageIdExpression(property, i))
                     .Append(", value.")
                     .Append(componentAccess[i])
                     .AppendLine(");");
@@ -234,8 +222,7 @@ namespace DynamicProperty.SourceGen
 
         private static void EmitRemove(
             StringBuilder sb,
-            SchemaModel schema,
-            GroupModel group,
+            PropertyModel property,
             string name,
             string receiverType)
         {
@@ -248,13 +235,14 @@ namespace DynamicProperty.SourceGen
 
             sb.AppendLine("        {");
 
-            foreach (var component in group.Components)
+            int slots =
+                AggregateContract.GetSlotCount(
+                    property.AggregateKind);
+
+            for (int i = 0; i < slots; i++)
             {
                 sb.Append("            view.PropertySet.Remove(")
-                    .Append(
-                        GetIdExpression(
-                            schema,
-                            component))
+                    .Append(GetStorageIdExpression(property, i))
                     .AppendLine(");");
             }
 
@@ -262,57 +250,13 @@ namespace DynamicProperty.SourceGen
             sb.AppendLine();
         }
 
-        private static string GetIdExpression(
-            SchemaModel schema,
-            PropertyModel property)
+        private static string GetStorageIdExpression(
+            PropertyModel property,
+            int slot)
         {
-            return property.IdExpression;
-        }
-
-        private static string GetAggregateTypeName(
-            AggregateKind kind)
-        {
-            switch (kind)
-            {
-                case AggregateKind.Vector2:
-                    return "global::UnityEngine.Vector2";
-
-                case AggregateKind.Vector3:
-                    return "global::UnityEngine.Vector3";
-
-                case AggregateKind.Vector4:
-                    return "global::UnityEngine.Vector4";
-
-                case AggregateKind.Color:
-                    return "global::UnityEngine.Color";
-
-                default:
-                    throw new InvalidOperationException(
-                        $"Unsupported aggregate kind '{kind}'.");
-            }
-        }
-
-        private static string[] GetComponentAccessors(
-            AggregateKind kind)
-        {
-            switch (kind)
-            {
-                case AggregateKind.Vector2:
-                    return new[] { "x", "y" };
-
-                case AggregateKind.Vector3:
-                    return new[] { "x", "y", "z" };
-
-                case AggregateKind.Vector4:
-                    return new[] { "x", "y", "z", "w" };
-
-                case AggregateKind.Color:
-                    return new[] { "r", "g", "b", "a" };
-
-                default:
-                    throw new InvalidOperationException(
-                        $"Unsupported aggregate kind '{kind}'.");
-            }
+            return AggregateContract.GetStorageIdExpression(
+                property.LogicalId,
+                slot);
         }
     }
 }

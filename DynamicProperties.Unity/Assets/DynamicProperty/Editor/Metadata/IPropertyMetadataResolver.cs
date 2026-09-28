@@ -1,13 +1,14 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 
 namespace DynamicProperty.Editor
 {
     public interface IPropertyMetadataResolver
     {
-        PropertyMetadata Get(int id);
-        string GetName(int id);
-        string[] GetAllNames();
-        int[] GetAllValues();
-        Type BoundEnumType { get; }
+        Type SchemaType { get; }
+        IReadOnlyList<PropertyMetadata> Properties { get; }
+        PropertyMetadata GetByLogicalId(int logicalId);
+        PropertyMetadata GetByStorageId(int storageId);
+        string GetNameByStorageId(int storageId);
     }
 }

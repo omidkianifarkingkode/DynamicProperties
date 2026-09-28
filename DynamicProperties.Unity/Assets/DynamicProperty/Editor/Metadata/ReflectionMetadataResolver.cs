@@ -9,144 +9,54 @@ namespace DynamicProperty.Editor
 {
     public sealed class ReflectionMetadataResolver : IPropertyMetadataResolver
     {
-        readonly Type _schemaType;
-        readonly bool _isEnumSchema;
-        readonly Dictionary<int, PropertyMetadata> _cache = new();
-        readonly Dictionary<int, string> _names = new();
-
-        int[] _allValues;
-        string[] _allNames;
-        bool _interfaceCacheBuilt;
+        private readonly Type _schemaType;
+        private readonly Dictionary<int, PropertyMetadata> _byLogicalId = new();
+        private readonly List<PropertyMetadata> _properties = new();
 
         public ReflectionMetadataResolver(Type schemaType)
         {
             if (schemaType == null)
-            {
                 throw new ArgumentNullException(nameof(schemaType));
-            }
 
-            if (schemaType.IsEnum)
-            {
-                if (Enum.GetUnderlyingType(schemaType) != typeof(int))
-                {
-                    throw new ArgumentException(
-                        "Property schema enum must use int as its underlying type.",
-                        nameof(schemaType));
-                }
-
-                _isEnumSchema = true;
-            }
-            else if (schemaType.IsInterface &&
-                     typeof(IPropertySchema).IsAssignableFrom(schemaType))
-            {
-                _isEnumSchema = false;
-            }
-            else
+            if (!schemaType.IsInterface ||
+                !typeof(IPropertySchema).IsAssignableFrom(schemaType))
             {
                 throw new ArgumentException(
-                    "Property schema type must be an enum or an interface implementing IPropertySchema.",
+                    "Property schema type must be an interface implementing IPropertySchema.",
                     nameof(schemaType));
             }
 
             _schemaType = schemaType;
+
+            Build();
         }
 
-        public Type BoundEnumType => _schemaType;
+        public Type SchemaType => _schemaType;
 
-        public PropertyMetadata Get(int id)
+        public IReadOnlyList<PropertyMetadata> Properties => _properties;
+
+        public PropertyMetadata GetByLogicalId(int logicalId)
         {
-            if (_isEnumSchema)
-                return GetEnumMetadata(id);
-
-            EnsureInterfaceCache();
-
-            return _cache.TryGetValue(id, out var metadata)
+            return _byLogicalId.TryGetValue(logicalId, out var metadata)
                 ? metadata
                 : null;
         }
 
-        public string GetName(int id)
+        public PropertyMetadata GetByStorageId(int storageId)
         {
-            if (_isEnumSchema)
-                return Enum.GetName(_schemaType, id);
-
-            EnsureInterfaceCache();
-
-            return _names.TryGetValue(id, out var name)
-                ? name
-                : null;
-        }
-
-        public string[] GetAllNames()
-        {
-            if (_isEnumSchema)
-                return Enum.GetNames(_schemaType);
-
-            EnsureInterfaceCache();
-
-            return _allNames;
-        }
-
-        public int[] GetAllValues()
-        {
-            if (_isEnumSchema)
-            {
-                var values = (Array)Enum.GetValues(_schemaType);
-
-                var result = new int[values.Length];
-
-                for (int i = 0; i < result.Length; i++)
-                {
-                    result[i] = Convert.ToInt32(values.GetValue(i));
-                }
-
-                return result;
-            }
-
-            EnsureInterfaceCache();
-
-            return _allValues;
-        }
-
-        PropertyMetadata GetEnumMetadata(int id)
-        {
-            if (_cache.TryGetValue(id, out var m)) return m;
-
-            string name = Enum.GetName(_schemaType, id);
-            if (name == null) return null;
-
-            var field = _schemaType.GetField(name);
-            var meta = new PropertyMetadata();
-
-            var propertyTypeAttr = field.GetCustomAttribute<PropertyTypeAttribute>();
-
-            if (propertyTypeAttr == null)
+            if (!PropertyStorageId.TryDecode(storageId, out int logicalId, out _))
                 return null;
 
-            var propertyType = propertyTypeAttr.Type;
-
-            ApplyTypeMetadata(meta, propertyType);
-
-            if (propertyTypeAttr.HasInitialValue)
-            {
-                meta.HasInitialValue = true;
-                meta.InitialValue = propertyTypeAttr.InitialValue;
-            }
-
-            ApplyCommonMetadata(meta, field);
-
-            _cache[id] = meta;
-            return meta;
+            return GetByLogicalId(logicalId);
         }
 
-        void EnsureInterfaceCache()
+        public string GetNameByStorageId(int storageId)
         {
-            if (_interfaceCacheBuilt)
-                return;
+            return GetByStorageId(storageId)?.Name;
+        }
 
-            var orderedValues = new List<int>();
-            var orderedNames = new List<string>();
-
+        private void Build()
+        {
             foreach (var property in _schemaType.GetProperties())
             {
                 var propertyAttr =
@@ -155,100 +65,52 @@ namespace DynamicProperty.Editor
                 if (propertyAttr == null)
                     continue;
 
-                var ids =
-                    propertyAttr.Ids?.ToArray() ??
-                    Array.Empty<int>();
-
-                var groupKind =
-                    GetGroupKind(property.PropertyType);
-
-                if (groupKind == PropertyGroupKind.None)
+                var metadata = new PropertyMetadata
                 {
-                    if (ids.Length != 1)
-                        continue;
+                    LogicalId = propertyAttr.Id,
+                    Name = property.Name,
+                    DisplayName = GetDisplayName(property),
+                    AggregateKind = GetAggregateKind(property.PropertyType)
+                };
 
-                    var meta = new PropertyMetadata();
+                ApplyTypeMetadata(metadata, property.PropertyType);
+                ApplyInitialValue(metadata, property);
+                ApplyCommonMetadata(metadata, property);
 
-                    ApplyTypeMetadata(meta, property.PropertyType);
-                    ApplyInitialValue(meta, property);
-                    ApplyCommonMetadata(meta, property);
-
-                    AddInterfaceMetadata(
-                        ids[0],
-                        property.Name,
-                        meta,
-                        orderedValues,
-                        orderedNames);
-
-                    continue;
-                }
-
-                string groupName =
-                    GetLogicalDisplayName(property);
-
-                var components =
-                    GetComponents(groupKind);
-
-                if (ids.Length != components.Length)
+                if (_byLogicalId.ContainsKey(metadata.LogicalId))
                     continue;
 
-                for (int i = 0; i < ids.Length; i++)
-                {
-                    var meta = new PropertyMetadata
-                    {
-                        Type = PropertyValueType.Float,
-                        GroupKind = groupKind,
-                        GroupName = groupName,
-                        GroupComponent = components[i]
-                    };
-
-                    ApplyCommonMetadata(meta, property);
-
-                    AddInterfaceMetadata(
-                        ids[i],
-                        groupName + " " + components[i],
-                        meta,
-                        orderedValues,
-                        orderedNames);
-                }
+                _byLogicalId.Add(metadata.LogicalId, metadata);
+                _properties.Add(metadata);
             }
 
-            _allValues = orderedValues.ToArray();
-            _allNames = orderedNames.ToArray();
-            _interfaceCacheBuilt = true;
+            _properties.Sort(CompareMetadata);
         }
 
-        static void AddInterfaceName(
-            int id,
-            string name,
-            PropertyMetadata metadata,
-            List<int> orderedValues,
-            List<string> orderedNames)
+        private static int CompareMetadata(PropertyMetadata left, PropertyMetadata right)
         {
-            orderedValues.Add(id);
-            orderedNames.Add(name);
-            metadata.DisplayName ??= name;
+            string leftCategory = NormalizeCategory(left.Category);
+            string rightCategory = NormalizeCategory(right.Category);
+
+            int categoryComparison =
+                string.Compare(leftCategory, rightCategory, StringComparison.OrdinalIgnoreCase);
+
+            if (categoryComparison != 0)
+                return categoryComparison;
+
+            int leftOrder = left.Order ?? int.MaxValue;
+            int rightOrder = right.Order ?? int.MaxValue;
+
+            int orderComparison =
+                leftOrder.CompareTo(rightOrder);
+
+            if (orderComparison != 0)
+                return orderComparison;
+
+            return left.LogicalId.CompareTo(right.LogicalId);
         }
 
-        void AddInterfaceMetadata(
-            int id,
-            string name,
-            PropertyMetadata metadata,
-            List<int> orderedValues,
-            List<string> orderedNames)
-        {
-            _cache[id] = metadata;
-            _names[id] = name;
-
-            AddInterfaceName(
-                id,
-                name,
-                metadata,
-                orderedValues,
-                orderedNames);
-        }
-
-        static void ApplyTypeMetadata(
+        private static void ApplyTypeMetadata(
             PropertyMetadata meta,
             Type propertyType)
         {
@@ -285,25 +147,12 @@ namespace DynamicProperty.Editor
                 meta.Type = PropertyValueType.Enum;
                 meta.EnumType = propertyType;
             }
-            else if (propertyType == typeof(Vector2))
+            else if (propertyType == typeof(Vector2) ||
+                     propertyType == typeof(Vector3) ||
+                     propertyType == typeof(Vector4) ||
+                     propertyType == typeof(Color))
             {
                 meta.Type = PropertyValueType.Float;
-                meta.GroupKind = PropertyGroupKind.Vector2;
-            }
-            else if (propertyType == typeof(Vector3))
-            {
-                meta.Type = PropertyValueType.Float;
-                meta.GroupKind = PropertyGroupKind.Vector3;
-            }
-            else if (propertyType == typeof(Vector4))
-            {
-                meta.Type = PropertyValueType.Float;
-                meta.GroupKind = PropertyGroupKind.Vector4;
-            }
-            else if (propertyType == typeof(Color))
-            {
-                meta.Type = PropertyValueType.Float;
-                meta.GroupKind = PropertyGroupKind.Color;
             }
             else
             {
@@ -312,7 +161,7 @@ namespace DynamicProperty.Editor
             }
         }
 
-        static void ApplyInitialValue(
+        private static void ApplyInitialValue(
             PropertyMetadata meta,
             PropertyInfo property)
         {
@@ -323,7 +172,7 @@ namespace DynamicProperty.Editor
             }
         }
 
-        static void ApplyCommonMetadata(
+        private static void ApplyCommonMetadata(
             PropertyMetadata meta,
             MemberInfo member)
         {
@@ -339,12 +188,6 @@ namespace DynamicProperty.Editor
             if (member.GetCustomAttribute(typeof(StepAttribute)) is StepAttribute st)
                 meta.Step = st.Step;
 
-            if (member.GetCustomAttribute(typeof(GroupAttribute)) is GroupAttribute grp)
-                meta.GroupName = grp.Name;
-
-            if (member.GetCustomAttribute<GroupComponentAttribute>() is { } component)
-                meta.GroupComponent = component.Component;
-
             if (member.GetCustomAttribute<PropertyEditorIgnoreAttribute>() != null)
                 meta.HiddenInEditor = true;
 
@@ -358,8 +201,7 @@ namespace DynamicProperty.Editor
                 meta.Order = order.Order;
         }
 
-        static string GetLogicalDisplayName(
-            PropertyInfo property)
+        private static string GetDisplayName(PropertyInfo property)
         {
             if (property.GetCustomAttribute(typeof(DisplayNameAttribute)) is DisplayNameAttribute dn)
                 return dn.DisplayName;
@@ -367,8 +209,7 @@ namespace DynamicProperty.Editor
             return NicifyName(property.Name);
         }
 
-        static string NicifyName(
-            string name)
+        private static string NicifyName(string name)
         {
             if (string.IsNullOrEmpty(name))
                 return name;
@@ -393,42 +234,28 @@ namespace DynamicProperty.Editor
             return new string(chars.ToArray());
         }
 
-        static PropertyGroupKind GetGroupKind(Type propertyType)
+        private static PropertyAggregateKind GetAggregateKind(Type propertyType)
         {
             if (propertyType == typeof(Vector2))
-                return PropertyGroupKind.Vector2;
+                return PropertyAggregateKind.Vector2;
 
             if (propertyType == typeof(Vector3))
-                return PropertyGroupKind.Vector3;
+                return PropertyAggregateKind.Vector3;
 
             if (propertyType == typeof(Vector4))
-                return PropertyGroupKind.Vector4;
+                return PropertyAggregateKind.Vector4;
 
             if (propertyType == typeof(Color))
-                return PropertyGroupKind.Color;
+                return PropertyAggregateKind.Color;
 
-            return PropertyGroupKind.None;
+            return PropertyAggregateKind.None;
         }
 
-        static PropertyComponent[] GetComponents(PropertyGroupKind groupKind)
+        private static string NormalizeCategory(string category)
         {
-            switch (groupKind)
-            {
-                case PropertyGroupKind.Vector2:
-                    return new[] { PropertyComponent.X, PropertyComponent.Y };
-
-                case PropertyGroupKind.Vector3:
-                    return new[] { PropertyComponent.X, PropertyComponent.Y, PropertyComponent.Z };
-
-                case PropertyGroupKind.Vector4:
-                    return new[] { PropertyComponent.X, PropertyComponent.Y, PropertyComponent.Z, PropertyComponent.W };
-
-                case PropertyGroupKind.Color:
-                    return new[] { PropertyComponent.R, PropertyComponent.G, PropertyComponent.B, PropertyComponent.A };
-
-                default:
-                    return Array.Empty<PropertyComponent>();
-            }
+            return string.IsNullOrWhiteSpace(category)
+                ? "Default"
+                : category.Trim();
         }
     }
 }

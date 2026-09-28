@@ -18,5 +18,5 @@ MonoBehaviour:
       rawValue: 100
     _items64: []
     _structureVersion: 1
-    _editorSchemaTypeName: DynamicProperty.Samples.Basic.WeaponProperties, DynamicProperty.Samples.Basic,
+    _editorSchemaTypeName: DynamicProperty.Samples.TypedSchema.WeaponSchema, DynamicProperty.Samples.Basic,
       Version=0.0.0.0, Culture=neutral, PublicKeyToken=null

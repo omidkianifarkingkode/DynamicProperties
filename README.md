@@ -1,200 +1,67 @@
+# DynamicProperty
 
-# 🧠 Dynamic Properties for Unity
+DynamicProperty stores sparse typed values in a `PropertySet` and generates strongly typed accessors from C# schema interfaces.
 
-A powerful, metadata-driven property system for Unity.  
-Define, store, and edit flexible game data properties (int, float, bool, enum, DateTime, TimeSpan, etc.) — with efficient storage, runtime access in O(1), and intelligent editor integration.  
-Built to solve the “sparse data model” problem in large projects.
+## Schema Declaration
 
-## 📦 Installation
-
-1. Open your Unity project.
-2. In `Packages/manifest.json`, add:
-
-```json
-"com.kingkode.dynamic-property": "https://github.com/omidkianifarkingkode/DynamicProperties.git?path=DynamicProperties.Unity/Assets/DynamicProperty"
-```
-
-Unity will automatically fetch the package.
-
-## 🧩 Importing the Example
-
-You can explore the included Basic Sample:
-
-1. Open `Window → Package Manager`.
-2. Select `Dynamic Property` from the list.
-3. Expand the Samples section.
-4. Click Import next to Basic Example.
-
-Unity will import the example into:
-
-```text
-Assets/Samples/Dynamic Property/1.0.0/Basic
-```
-
-Then, create the example asset manually:
-
-1. Go to `Assets → Create → DynamicProperty → Create Sample Character Data`.
-
-The sample includes a metadata-decorated enum and a ready-to-use `CharacterData` ScriptableObject.
-
-## 🧩 Why Dynamic Properties?
-
-Traditional Unity data models often define dozens of serialized fields — but most remain unused.  
-This leads to sparse data models: many fields, few meaningful values, wasted memory, and rigid code.  
-
-Dynamic Properties solve this by storing game data as a list of key-value pairs instead of hard-coded fields.  
-
-However, this raises new challenges — and here’s how the package addresses them:
-
-### ⚙️ 1. Variant Storage (Multi-Type Support)
-
-Storing mixed types in a single list is tricky.  
-Dynamic Properties unify all values into:
-
-- `int` (32-bit) for small data (int, float, bool, enums, etc.)
-- `long` (64-bit) for large or precise data (double, DateTime, TimeSpan, 64-bit enums)
-
-Other types are converted seamlessly to one of these primitives.  
-This keeps storage compact, serialization-safe, and fast.
-
-### ⚡ 2. O(1) Property Lookup
-
-Naively iterating a list for every property lookup is slow.  
-Dynamic Properties automatically build a dictionary cache (`PropertySet`) after Unity loads, giving:
-
-- O(1) access time for reads and writes — even across thousands of entries.
-
-### 🧰 3. Metadata-Driven Editor
-
-Instead of hardcoding how each property is drawn, Dynamic Properties use attributes on your enum definitions:
+Schemas are interfaces implementing `IPropertySchema`. Each property has exactly one logical ID:
 
 ```csharp
-public enum CharacterProperties
-{
-    [PropertyType(typeof(int)), MinMax(0, 1000)] Health,
-    [PropertyType(typeof(bool))] IsBoss,
-    [PropertyType(typeof(DateTime))] SpawnTime
-}
-```
-
-The editor automatically:
-- Displays the right drawer for each type.
-- Applies min/max or step constraints.
-- Groups related values (e.g., Vector3, Color).
-- No custom inspector code required.
-
-### 🧬 4. Strongly-Typed Access via Source Generator
-
-Using raw keys like `GetInt(Health)` works but isn’t ergonomic.  
-Dynamic Properties include a Roslyn Source Generator that creates extension methods based on your enum definitions.
-
-Example:
-
-```csharp
-// Your enum
-[PropertyType(typeof(int))] Health,
-[PropertyType(typeof(bool))] IsBoss,
-
-// Generated
-set.Health();
-set.SetHealth(50);
-set.HasHealth();
-
-set.IsBoss();
-set.SetIsBoss(true);
-```
-
-Grouped values (like Vector3 or Color) also get high-level accessors:
-
-```csharp
-set.GetSpawnPosition();   // Returns Vector3
-set.SetSpawnPosition(v3);
-```
-
-This means type-safe, auto-complete-friendly, semantic code — no manual boilerplate.
-
-### Prototype: Typed Interface Schemas
-
-Dynamic Properties also includes a prototype typed C# schema declaration model. It is additive; existing enum schemas remain supported.
-
-```csharp
-using DynamicProperty;
-using DynamicProperty.DataAnnotations;
-using Vector3 = UnityEngine.Vector3;
-
 public interface CharacterSchema : IPropertySchema
 {
     [Property(1)]
     [InitialValue(100)]
     [MinMax(0, 1000)]
+    [PropertyCategory("Basic")]
     int Health { get; }
 
-    [Property(6, 7, 8)]
+    [Property(2)]
+    [InitialValue(true)]
+    [PropertyCategory("Basic")]
+    bool IsBoss { get; }
+
+    [Property(3)]
+    WeaponType Weapon { get; }
+
+    [Property(6)]
+    [PropertyCategory("Spawn")]
     Vector3 SpawnPosition { get; }
+
+    [Property(7)]
+    [PropertyCategory("Spawn")]
+    Color BodyColor { get; }
 }
 ```
 
-Typed schemas must be interfaces implementing `IPropertySchema`. Every schema property must declare `[Property(...)]`; missing attributes, unsupported types, invalid aggregate ID counts, and duplicate IDs are reported by the source generator. Aggregate IDs are explicit and ordered: `Vector3` is `x, y, z`, and `Color` is `r, g, b, a`.
+The C# property type defines the DynamicProperty value kind. Supported scalar types are `int`, `float`, `bool`, `long`, `double`, `DateTime`, `TimeSpan`, and enum value types. Supported aggregates are `Vector2`, `Vector3`, `Vector4`, and `Color`.
 
-In Unity files that import `UnityEngine`, `[Property]` can be ambiguous with `UnityEngine.PropertyAttribute`. Use targeted aliases like `using Vector3 = UnityEngine.Vector3;` or alias the schema attribute if needed.
-
-## 🚀 Usage Overview
-
-### 1️⃣ Define your enum
+Generated usage stays centered on `PropertySetView<TSchema>`:
 
 ```csharp
-public enum CharacterProperties
-{
-    [PropertyType(typeof(int)), MinMax(0, 1000)]
-    Health,
+var character = properties.For<CharacterSchema>();
 
-    [PropertyType(typeof(bool))]
-    IsBoss,
+int health = character.Health();
+character.SetHealth(200);
 
-    [PropertyType(typeof(Vector3)), Group("Spawn Position")]
-    PosX, PosY, PosZ
-}
+Vector3 position = character.SpawnPosition();
+character.SetSpawnPosition(new Vector3(1, 2, 3));
 ```
 
-### 2️⃣ Bind your enum
+## Storage IDs
 
-Go to `Edit → Project Settings → Dynamic Properties` and assign your enum type (`CharacterProperties`).
+`[Property(id)]` is a logical property ID. Internal sparse storage IDs are derived centrally with:
 
-### 3️⃣ Use it in data objects
-
-```csharp
-[CreateAssetMenu(menuName = "Data/Character")]
-public class CharacterData : ScriptableObject
-{
-    public DynamicProperty.PropertySet Properties;
-}
-```
-
-### 4️⃣ Access values in code
-
-```csharp
-// Generated accessors
-int health = Properties.Health();
-Properties.SetHealth(80);
-
-Vector3 pos = Properties.GetSpawnPosition();
-Properties.SetSpawnPosition(new Vector3(0, 1, 0));
-```
-
-You can enable or disable the DynamicProperty Source Generator anytime from:
 ```text
-Tools → Dynamic Property → Source Generator → Enabled in Unity.
+storageId = (logicalId << 3) | slot
 ```
 
-## 🧱 Key Features
+Slot `0` is used for scalars. Aggregates use slots in component order:
 
-- ✅ Strongly-typed & attribute-driven property metadata
-- ⚡ O(1) runtime lookups with auto dictionary serialization
-- 🧩 Extensible editor drawers
-- 🧠 Source generator for semantic property access
-- 🧮 Compact storage (32/64-bit core types)
-- 💾 Works in runtime & editor assemblies
+```text
+Vector2: X=0, Y=1
+Vector3: X=0, Y=1, Z=2
+Vector4: X=0, Y=1, Z=2, W=3
+Color:   R=0, G=1, B=2, A=3
+```
 
-## 📄 License
-
-MIT License © 2025 Omid Kianifar (@KingKode)
+This is a breaking pre-v1 storage redesign. Assets authored with the previous enum/component-ID schema model may need to be recreated; no legacy migration layer is retained.

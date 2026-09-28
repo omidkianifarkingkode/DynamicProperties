@@ -25,23 +25,8 @@ namespace DynamicProperty.SourceGen
         Color
     }
 
-    internal enum GroupComponentKind
-    {
-        X,
-        Y,
-        Z,
-        W,
-
-        R,
-        G,
-        B,
-        A
-    }
-
     internal sealed class SchemaModel
     {
-        public bool IsInterfaceSchema { get; }
-
         public INamedTypeSymbol Symbol { get; }
 
         public string Name { get; }
@@ -53,14 +38,12 @@ namespace DynamicProperty.SourceGen
         public IReadOnlyList<PropertyModel> Properties { get; }
 
         public SchemaModel(
-            bool isInterfaceSchema,
             INamedTypeSymbol symbol,
             string name,
             string @namespace,
             string fullyQualifiedName,
             IReadOnlyList<PropertyModel> properties)
         {
-            IsInterfaceSchema = isInterfaceSchema;
             Symbol = symbol;
             Name = name;
             Namespace = @namespace;
@@ -83,19 +66,7 @@ namespace DynamicProperty.SourceGen
 
         public bool IsFlagsEnum { get; }
 
-        public bool HasGroupAttribute { get; }
-
-        public string GroupName { get; }
-
-        public bool HasGroupComponentAttribute { get; }
-
-        public GroupComponentKind? GroupComponent { get; }
-
-        public string IdExpression { get; }
-
-        public IReadOnlyList<int> StorageIds { get; }
-
-        public bool EmitScalarApi { get; }
+        public int LogicalId { get; }
 
         public PropertyModel(
             ISymbol symbol,
@@ -104,13 +75,7 @@ namespace DynamicProperty.SourceGen
             ValueKind kind,
             AggregateKind aggregateKind,
             bool isFlagsEnum,
-            bool hasGroupAttribute,
-            string groupName,
-            bool hasGroupComponentAttribute,
-            GroupComponentKind? groupComponent,
-            string idExpression,
-            IReadOnlyList<int> storageIds,
-            bool emitScalarApi)
+            int logicalId)
         {
             Symbol = symbol;
             Name = name;
@@ -118,13 +83,7 @@ namespace DynamicProperty.SourceGen
             Kind = kind;
             AggregateKind = aggregateKind;
             IsFlagsEnum = isFlagsEnum;
-            HasGroupAttribute = hasGroupAttribute;
-            GroupName = groupName;
-            HasGroupComponentAttribute = hasGroupComponentAttribute;
-            GroupComponent = groupComponent;
-            IdExpression = idExpression;
-            StorageIds = storageIds;
-            EmitScalarApi = emitScalarApi;
+            LogicalId = logicalId;
         }
     }
 }

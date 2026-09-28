@@ -1,4 +1,4 @@
-﻿using DynamicProperty.DataAnnotations;
+using DynamicProperty.DataAnnotations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,34 +25,13 @@ namespace DynamicProperty.Editor
 
         public static bool IsSchemaType(Type type)
         {
-            if (type == null)
-                return false;
-
-            if (type.IsInterface &&
-                typeof(IPropertySchema).IsAssignableFrom(type))
-            {
-                return type
-                    .GetProperties()
-                    .Any(property =>
-                        property.GetCustomAttribute<DynamicProperty.DataAnnotations.PropertyAttribute>() != null);
-            }
-
-            if (type.IsEnum)
-            {
-                // Original DynamicProperty schema contract.
-                if (Enum.GetUnderlyingType(type) != typeof(int))
-                    return false;
-
-                return type
-                    .GetFields(
-                        BindingFlags.Public |
-                        BindingFlags.NonPublic |
-                        BindingFlags.Static)
-                    .Any(field =>
-                        field.GetCustomAttribute<PropertyTypeAttribute>() != null);
-            }
-
-            return false;
+            return type != null &&
+                   type.IsInterface &&
+                   typeof(IPropertySchema).IsAssignableFrom(type) &&
+                   type
+                       .GetProperties()
+                       .Any(property =>
+                           property.GetCustomAttribute<DynamicProperty.DataAnnotations.PropertyAttribute>() != null);
         }
 
         public static string GetSerializedName(Type type)
@@ -66,12 +45,8 @@ namespace DynamicProperty.Editor
                 return null;
 
             if (TypesBySerializedName.TryGetValue(serializedName, out var knownType))
-            {
                 return knownType;
-            }
 
-            // Fallback in case the type was not present when
-            // the static cache was initially built.
             var resolved =
                 Type.GetType(serializedName, throwOnError: false);
 

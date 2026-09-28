@@ -1,18 +1,15 @@
 using System;
-using System.Collections.Generic;
 
 namespace DynamicProperty.DataAnnotations
 {
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
     public sealed class PropertyAttribute : Attribute
     {
-        readonly int[] _ids;
+        public int Id { get; }
 
-        public IReadOnlyList<int> Ids => _ids;
-
-        public PropertyAttribute(params int[] ids)
+        public PropertyAttribute(int id)
         {
-            _ids = ids ?? Array.Empty<int>();
+            Id = id;
         }
     }
 }

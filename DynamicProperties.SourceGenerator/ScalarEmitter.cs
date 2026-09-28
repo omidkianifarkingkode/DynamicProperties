@@ -10,8 +10,7 @@ namespace DynamicProperty.SourceGen
             StringBuilder sb,
             SchemaModel schema,
             PropertyModel property,
-            string generatedName,
-            string idExpression)
+            string generatedName)
         {
             if (sb == null)
                 throw new ArgumentNullException(nameof(sb));
@@ -27,6 +26,11 @@ namespace DynamicProperty.SourceGen
 
             string receiverType =
                 GeneratorTypeUtility.GetPropertySetViewType(schema);
+
+            string idExpression =
+                AggregateContract.GetStorageIdExpression(
+                    property.LogicalId,
+                    0);
 
             EmitGetter(
                 sb,

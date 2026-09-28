@@ -1,5 +1,5 @@
 ﻿<Solution>
-  <Project Path="DynamicProperty.Editor.csproj" />
   <Project Path="DynamicProperty.Runtime.csproj" />
+  <Project Path="DynamicProperty.Editor.csproj" />
   <Project Path="DynamicProperty.Samples.Basic.csproj" />
 </Solution>

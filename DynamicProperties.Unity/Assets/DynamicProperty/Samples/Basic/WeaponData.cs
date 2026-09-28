@@ -1,4 +1,4 @@
-﻿using DynamicProperty.DataAnnotations;
+using DynamicProperty.Samples.TypedSchema;
 using UnityEngine;
 
 namespace DynamicProperty.Samples.Basic
@@ -11,13 +11,12 @@ namespace DynamicProperty.Samples.Basic
         [ContextMenu("DynamicProperty/Print Properties")]
         private void PrintProperties()
         {
-            var weapon = properties.For<WeaponProperties>();
+            var weapon = properties.For<WeaponSchema>();
 
             Debug.Log(properties != null ? properties.ToString() : "<null>", this);
-            Debug.Log(weapon.Demage(), this);
-            Debug.Log(weapon.Meele(), this);
+            Debug.Log(weapon.Damage(), this);
+            Debug.Log(weapon.Melee(), this);
             Debug.Log(weapon.Health(), this);
         }
     }
 }
-

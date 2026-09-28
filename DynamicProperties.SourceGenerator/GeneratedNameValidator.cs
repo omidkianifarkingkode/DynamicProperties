@@ -24,7 +24,6 @@ namespace DynamicProperty.SourceGen
 
         public static bool Validate(
             SchemaModel schema,
-            IReadOnlyList<GroupModel> groups,
             Action<Diagnostic> reportDiagnostic)
         {
             var names =
@@ -42,20 +41,16 @@ namespace DynamicProperty.SourceGen
                 string origin =
                     $"property '{property.Name}'";
 
-                if (property.EmitScalarApi)
-                {
-                    valid &=
-                        AddPropertyMethods(
-                            schema,
-                            property,
-                            baseName,
-                            origin,
-                            names,
-                            reportDiagnostic);
-                }
+                valid &=
+                    AddPropertyMethods(
+                        schema,
+                        property,
+                        baseName,
+                        origin,
+                        names,
+                        reportDiagnostic);
 
-                if (property.EmitScalarApi &&
-                    property.Kind == ValueKind.Enum &&
+                if (property.Kind == ValueKind.Enum &&
                     property.IsFlagsEnum)
                 {
                     valid &=
@@ -66,64 +61,6 @@ namespace DynamicProperty.SourceGen
                             names,
                             reportDiagnostic);
                 }
-            }
-
-            foreach (var group in groups)
-            {
-                string baseName =
-                    IdentifierUtility.ToPascalIdentifier(
-                        group.Name);
-
-                string origin =
-                    $"group '{group.Name}'";
-
-                ISymbol symbol =
-                    group.Components[0].Symbol;
-
-                valid &=
-                    AddMethod(
-                        schema,
-                        symbol,
-                        baseName,
-                        origin,
-                        names,
-                        reportDiagnostic);
-
-                valid &=
-                    AddMethod(
-                        schema,
-                        symbol,
-                        "TryGet" + baseName,
-                        origin,
-                        names,
-                        reportDiagnostic);
-
-                valid &=
-                    AddMethod(
-                        schema,
-                        symbol,
-                        "Has" + baseName,
-                        origin,
-                        names,
-                        reportDiagnostic);
-
-                valid &=
-                    AddMethod(
-                        schema,
-                        symbol,
-                        "Set" + baseName,
-                        origin,
-                        names,
-                        reportDiagnostic);
-
-                valid &=
-                    AddMethod(
-                        schema,
-                        symbol,
-                        "Remove" + baseName,
-                        origin,
-                        names,
-                        reportDiagnostic);
             }
 
             return valid;

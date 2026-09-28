@@ -18,5 +18,5 @@ MonoBehaviour:
       rawValue: 0
     _items64: []
     _structureVersion: 1
-    _editorSchemaTypeName: DynamicProperty.Samples.Basic.CharacterProperties, DynamicProperty.Samples.Basic,
+    _editorSchemaTypeName: DynamicProperty.Samples.TypedSchema.CharacterSchema, DynamicProperty.Samples.Basic,
       Version=0.0.0.0, Culture=neutral, PublicKeyToken=null

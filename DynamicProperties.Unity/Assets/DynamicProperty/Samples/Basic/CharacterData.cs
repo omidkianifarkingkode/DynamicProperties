@@ -1,6 +1,5 @@
-﻿using DynamicProperty.DataAnnotations;
+using DynamicProperty.Samples.TypedSchema;
 using UnityEngine;
-using static UnityEngine.Audio.GeneratorInstance;
 
 namespace DynamicProperty.Samples.Basic
 {
@@ -12,7 +11,7 @@ namespace DynamicProperty.Samples.Basic
         [ContextMenu("DynamicProperty/Print Properties")]
         private void PrintProperties()
         {
-            var character = properties.For<CharacterProperties>();
+            var character = properties.For<CharacterSchema>();
 
             Debug.Log(properties != null ? properties.ToString() : "<null>", this);
 
@@ -25,4 +24,3 @@ namespace DynamicProperty.Samples.Basic
         }
     }
 }
-

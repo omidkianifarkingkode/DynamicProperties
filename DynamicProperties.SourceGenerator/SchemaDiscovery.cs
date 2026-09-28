@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 
@@ -8,7 +8,7 @@ namespace DynamicProperty.SourceGen
     {
         public static IReadOnlyList<INamedTypeSymbol> Discover(
             Compilation compilation,
-            SchemaEnumSyntaxReceiver receiver,
+            SchemaSyntaxReceiver receiver,
             GeneratorSymbols symbols)
         {
             var result =
@@ -17,35 +17,6 @@ namespace DynamicProperty.SourceGen
             var seen =
                 new HashSet<INamedTypeSymbol>(
                     SymbolEqualityComparer.Default);
-
-            foreach (var syntax in receiver.Candidates)
-            {
-                var semanticModel =
-                    compilation.GetSemanticModel(
-                        syntax.SyntaxTree);
-
-                var enumSymbol =
-                    semanticModel.GetDeclaredSymbol(syntax)
-                        as INamedTypeSymbol;
-
-                if (enumSymbol == null)
-                    continue;
-
-                if (enumSymbol.TypeKind != TypeKind.Enum)
-                    continue;
-
-                if (!IsDynamicPropertySchema(
-                        enumSymbol,
-                        symbols))
-                {
-                    continue;
-                }
-
-                if (seen.Add(enumSymbol))
-                {
-                    result.Add(enumSymbol);
-                }
-            }
 
             foreach (var syntax in receiver.InterfaceCandidates)
             {
@@ -71,25 +42,10 @@ namespace DynamicProperty.SourceGen
                 }
 
                 if (seen.Add(interfaceSymbol))
-                {
                     result.Add(interfaceSymbol);
-                }
             }
 
             return result;
-        }
-
-        private static bool IsDynamicPropertySchema(
-            INamedTypeSymbol enumSymbol,
-            GeneratorSymbols symbols)
-        {
-            return enumSymbol
-                .GetMembers()
-                .OfType<IFieldSymbol>()
-                .Any(field =>
-                    field.ConstantValue != null &&
-                    field.HasAttribute(
-                        symbols.PropertyTypeAttribute));
         }
 
         private static bool IsTypedPropertySchema(
